@@ -13,7 +13,12 @@ def register(client):
 
     @client.on_message(filters.command("ping", prefixes=".") & filters.me)
     async def ping_handler(client, message: Message):
+        import time
+        start = time.time()
         await message.edit_text("**Pong!**")
+        end = time.time()
+        ms = int((end - start) * 1000)
+        await message.edit_text(f"**Pong!** `{ms}ms`")
 
 
 def on_load():
