@@ -1,6 +1,7 @@
 import os
 import logging
 from pyrogram import Client, filters, idle
+from pyrogram.enums import ParseMode
 from pyrogram.handlers import MessageHandler
 from pyrogram.types import Message
 from config import Config
@@ -24,7 +25,7 @@ async def lm_command(client: Client, message: Message):
             "  <code>.lm reload &lt;file&gt;</code> - reload script\n"
             "  <code>.lm info &lt;file&gt;</code> - script info\n"
             "  <code>.lm unload_all</code> - unload all scripts",
-            parse_mode="html",
+            parse_mode=ParseMode.HTML,
         )
         return
 
@@ -48,7 +49,7 @@ async def lm_command(client: Client, message: Message):
     elif action == "unload_all":
         await _cmd_unload_all(client, message)
     else:
-        await message.edit_text(f"Unknown command: <code>{action}</code>", parse_mode="html")
+        await message.edit_text(f"Unknown command: <code>{action}</code>", parse_mode=ParseMode.HTML)
 
 
 async def _cmd_list(client: Client, message: Message):
@@ -77,7 +78,7 @@ async def _cmd_list(client: Client, message: Message):
         text += "  <i>All loaded</i>\n"
 
     text += f"\nTotal files: {len(available)}"
-    await message.edit_text(text, parse_mode="html")
+    await message.edit_text(text, parse_mode=ParseMode.HTML)
 
 
 async def _cmd_load(client: Client, message: Message, filename: str):
@@ -94,11 +95,11 @@ async def _cmd_load(client: Client, message: Message, filename: str):
             f"Version: {result.get('info', {}).get('version', 'N/A')}\n"
             f"Author: {result.get('info', {}).get('author', 'N/A')}\n"
             f"Description: {result.get('info', {}).get('description', 'N/A')}",
-            parse_mode="html",
+            parse_mode=ParseMode.HTML,
         )
         Config.add_log(f"Script {filename} loaded")
     else:
-        await message.edit_text(f"Error: <code>{result['error']}</code>", parse_mode="html")
+        await message.edit_text(f"Error: <code>{result['error']}</code>", parse_mode=ParseMode.HTML)
         Config.add_log(f"Error loading {filename}: {result['error']}", "ERROR")
 
 
@@ -110,10 +111,10 @@ async def _cmd_unload(client: Client, message: Message, filename: str):
     result = loader.unload_script(filename)
 
     if result["success"]:
-        await message.edit_text(f"Script <code>{filename}</code> unloaded.", parse_mode="html")
+        await message.edit_text(f"Script <code>{filename}</code> unloaded.", parse_mode=ParseMode.HTML)
         Config.add_log(f"Script {filename} unloaded")
     else:
-        await message.edit_text(f"Error: <code>{result['error']}</code>", parse_mode="html")
+        await message.edit_text(f"Error: <code>{result['error']}</code>", parse_mode=ParseMode.HTML)
 
 
 async def _cmd_reload(client: Client, message: Message, filename: str):
@@ -124,10 +125,10 @@ async def _cmd_reload(client: Client, message: Message, filename: str):
     loader.unload_script(filename)
     result = loader.load_script(filename, client)
     if result["success"]:
-        await message.edit_text(f"Script <code>{filename}</code> reloaded!", parse_mode="html")
+        await message.edit_text(f"Script <code>{filename}</code> reloaded!", parse_mode=ParseMode.HTML)
         Config.add_log(f"Script {filename} reloaded")
     else:
-        await message.edit_text(f"Error: <code>{result['error']}</code>", parse_mode="html")
+        await message.edit_text(f"Error: <code>{result['error']}</code>", parse_mode=ParseMode.HTML)
 
 
 async def _cmd_info(client: Client, message: Message, filename: str):
@@ -149,7 +150,7 @@ async def _cmd_info(client: Client, message: Message, filename: str):
         )
     else:
         text = f"Script <code>{filename}</code> not found."
-    await message.edit_text(text, parse_mode="html")
+    await message.edit_text(text, parse_mode=ParseMode.HTML)
 
 
 async def _cmd_unload_all(client: Client, message: Message):
