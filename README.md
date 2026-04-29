@@ -24,7 +24,7 @@ Scripts go in `scripts/` folder as `.py` files.
 
 ```python
 def register(client):
-    from pyrofork import filters
+    from pyrogram import filters
     @client.on_message(filters.command("cmd", prefixes=".") & filters.me)
     async def handler(client, message):
         await message.edit_text("Hello!")

@@ -8,8 +8,8 @@ Description: Simple example script. Replies to .ping with "Pong!"
 
 def register(client):
     """Register handlers when script is loaded."""
-    from pyrofork import filters
-    from pyrofork.types import Message
+    from pyrogram import filters
+    from pyrogram.types import Message
 
     @client.on_message(filters.command("ping", prefixes=".") & filters.me)
     async def ping_handler(client, message: Message):

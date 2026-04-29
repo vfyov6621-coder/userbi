@@ -1,8 +1,8 @@
 import os
 import logging
-from pyrofork import Client, filters, idle
-from pyrofork.handlers import MessageHandler
-from pyrofork.types import Message
+from pyrogram import Client, filters, idle
+from pyrogram.handlers import MessageHandler
+from pyrogram.types import Message
 from config import Config
 from loader import ScriptLoader
 

@@ -12,7 +12,7 @@ class Config:
     API_HASH = os.environ.get("API_HASH", "")
     PHONE = os.environ.get("PHONE", "")
 
-    # Pyrofork session string (alternative to phone)
+    # Pyrogram session string (alternative to phone)
     SESSION_STRING = os.environ.get("SESSION_STRING", "")
 
     # Web panel

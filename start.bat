@@ -42,7 +42,7 @@ if not exist "backups" mkdir backups
 
 :: Install dependencies
 echo [1/2] Checking dependencies...
-python -m pip install pyrofork flask python-dotenv nest_asyncio gunicorn >nul 2>&1
+python -m pip install pyrogram flask python-dotenv nest_asyncio gunicorn >nul 2>&1
 
 :: Start
 echo [2/2] Starting userbot...
