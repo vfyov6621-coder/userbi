@@ -1,9 +1,16 @@
 import os
+import json
+import time
 import logging
 from pyrogram import Client, filters, idle
 from pyrogram.enums import ParseMode
-from pyrogram.handlers import MessageHandler
-from pyrogram.types import Message
+from pyrogram.handlers import MessageHandler, CallbackQueryHandler
+from pyrogram.types import (
+    Message,
+    CallbackQuery,
+    InlineKeyboardMarkup,
+    InlineKeyboardButton,
+)
 from config import Config
 from loader import ScriptLoader
 
@@ -12,6 +19,101 @@ logger = logging.getLogger("userbot.bot")
 # Global reference to the client (needed for script register())
 bot_client = None
 
+BOT_NAME = "Zaya"
+INFO_FILE = os.path.join(Config.CUSTOM_SCRIPTS_DIR, "bot_info.json")
+PHOTO_FILE = os.path.join(Config.CUSTOM_SCRIPTS_DIR, "bot_photo.jpg")
+
+
+# ═══════════════════════════════════════════════════════════════════════
+#  .mm  —  built-in menu
+# ═══════════════════════════════════════════════════════════════════════
+
+def _load_info() -> dict:
+    try:
+        if os.path.exists(INFO_FILE):
+            with open(INFO_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+    except Exception:
+        pass
+    return {"name": BOT_NAME, "bio": "", "owner": "", "info": "Инфо не настроена."}
+
+
+MM_KEYBOARD = InlineKeyboardMarkup(
+    [
+        [InlineKeyboardButton("📷 Фото", callback_data="mm_photo")],
+        [InlineKeyboardButton("🏓 Пинг", callback_data="mm_ping")],
+        [InlineKeyboardButton("ℹ️ Инфо", callback_data="mm_info")],
+    ]
+)
+
+
+async def mm_command(client: Client, message: Message):
+    """Show the main menu."""
+    info = _load_info()
+    name = info.get("name", BOT_NAME)
+    bio = info.get("bio", "")
+
+    text = f"🤖 <b>{name}</b>"
+    if bio:
+        text += f"\n<i>{bio}</i>"
+    text += "\n\nВыберите действие:"
+
+    await message.edit_text(text, reply_markup=MM_KEYBOARD, parse_mode=ParseMode.HTML)
+
+
+async def mm_callback(client: Client, callback: CallbackQuery):
+    """Handle inline keyboard presses from .mm menu."""
+    data = callback.data
+
+    # ── Photo ──────────────────────────────────────────────────────
+    if data == "mm_photo":
+        if os.path.exists(PHOTO_FILE):
+            try:
+                await callback.message.reply_photo(PHOTO_FILE, caption="📷 Фото")
+                await callback.answer("Фото отправлено!", show_alert=False)
+            except Exception as e:
+                await callback.answer(f"Ошибка: {e}", show_alert=True)
+        else:
+            await callback.answer(
+                "Файл bot_photo.jpg не найден.\nПоложите фото в scripts_custom/bot_photo.jpg",
+                show_alert=True,
+            )
+
+    # ── Ping ───────────────────────────────────────────────────────
+    elif data == "mm_ping":
+        start = time.time()
+        msg = await callback.message.edit_text("🏓 Пинг...")
+        end = time.time()
+        ms = int((end - start) * 1000)
+        await msg.edit_text(f"🏓 <b>Пинг: {ms}ms</b>", parse_mode=ParseMode.HTML)
+        await callback.answer(show_alert=False)
+
+    # ── Info ───────────────────────────────────────────────────────
+    elif data == "mm_info":
+        info = _load_info()
+
+        lines = [f"🤖 <b>{info.get('name', BOT_NAME)}</b>"]
+        if info.get("owner"):
+            lines.append(f"👤 Владелец: <b>{info['owner']}</b>")
+        if info.get("bio"):
+            lines.append(f"📝 <i>{info['bio']}</i>")
+        if info.get("info"):
+            lines.append(f"\n{info['info']}")
+
+        lines.append(f"\n📁 Файл: <code>{INFO_FILE}</code>")
+        lines.append("ℹ️ Отредактируйте bot_info.json чтобы изменить инфо")
+
+        text = "\n".join(lines)
+        await callback.message.edit_text(text, parse_mode=ParseMode.HTML)
+        await callback.answer(show_alert=False)
+
+    else:
+        await callback.answer()
+
+
+# ═══════════════════════════════════════════════════════════════════════
+#  .lm  —  script management
+# ═══════════════════════════════════════════════════════════════════════
 
 async def lm_command(client: Client, message: Message):
     """Handler for .lm command - script management."""
@@ -165,12 +267,16 @@ async def _cmd_unload_all(client: Client, message: Message):
     Config.add_log(f"Unloaded {count} scripts")
 
 
+# ═══════════════════════════════════════════════════════════════════════
+#  Bot startup
+# ═══════════════════════════════════════════════════════════════════════
+
 async def run_bot():
     """Start the userbot. Client is created here in the same event loop."""
     global bot_client
 
-    Config.add_log("Initializing userbot...")
-    logger.info("Starting userbot...")
+    Config.add_log(f"Initializing {BOT_NAME}...")
+    logger.info(f"Starting {BOT_NAME}...")
 
     if not Config.API_ID or not Config.API_HASH:
         Config.add_log("ERROR: API_ID and API_HASH not configured!", "ERROR")
@@ -188,6 +294,13 @@ async def run_bot():
 
     bot_client = client
 
+    # ── Built-in commands ───────────────────────────────────────────
+    client.add_handler(
+        MessageHandler(mm_command, filters.command("mm", prefixes=".") & filters.me)
+    )
+    client.add_handler(
+        CallbackQueryHandler(mm_callback, filters.regex(r"^mm_"))
+    )
     client.add_handler(
         MessageHandler(lm_command, filters.command("lm", prefixes=".") & filters.me)
     )
@@ -210,9 +323,9 @@ async def run_bot():
         async with client:
             me = await client.get_me()
             Config.add_log(
-                f"Userbot started! Account: @{me.username or me.first_name} (ID: {me.id})"
+                f"{BOT_NAME} started! Account: @{me.username or me.first_name} (ID: {me.id})"
             )
-            logger.info(f"Userbot started as @{me.username or me.first_name}")
+            logger.info(f"{BOT_NAME} started as @{me.username or me.first_name}")
             await idle()
     except Exception as e:
         Config.add_log(f"Bot error: {e}", "ERROR")
