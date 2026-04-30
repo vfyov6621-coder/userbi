@@ -58,7 +58,7 @@ async def mm_command(client: Client, message: Message):
         text += f"\n<i>{bio}</i>"
     text += "\n\nВыберите действие:"
 
-    await message.edit_text(text, reply_markup=MM_KEYBOARD, parse_mode=ParseMode.HTML)
+    await message.edit(text, reply_markup=MM_KEYBOARD, parse_mode=ParseMode.HTML)
 
 
 async def mm_callback(client: Client, callback: CallbackQuery):
