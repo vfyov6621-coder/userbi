@@ -8,7 +8,8 @@ Description: Weather info with city whitelist. Usage: .wea <city>, .wea add <cit
 import os
 import json
 import asyncio
-import aiohttp
+import urllib.request
+import urllib.error
 
 WHITELIST_FILE = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
@@ -193,16 +194,12 @@ def register(client):
         try:
             url = f"https://wttr.in/{city}?format=j1&lang=ru"
 
-            timeout = aiohttp.ClientTimeout(total=15)
-            async with aiohttp.ClientSession(timeout=timeout) as session:
-                async with session.get(url) as resp:
-                    if resp.status != 200:
-                        await message.edit_text(
-                            f"❌ Город <b>{city}</b> не найден",
-                            parse_mode=ParseMode.HTML,
-                        )
-                        return
-                    data = await resp.json()
+            def _fetch():
+                req = urllib.request.Request(url, headers={"User-Agent": "curl/7.68.0"})
+                with urllib.request.urlopen(req, timeout=15) as resp:
+                    return json.loads(resp.read().decode())
+
+            data = await asyncio.get_event_loop().run_in_executor(None, _fetch)
 
             cur = data["current_condition"][0]
 
@@ -244,14 +241,14 @@ def register(client):
 
             await message.edit_text(text, parse_mode=ParseMode.HTML)
 
-        except asyncio.TimeoutError:
+        except (asyncio.TimeoutError, TimeoutError):
             await message.edit_text(
                 "❌ Таймаут. Попробуйте позже.",
                 parse_mode=ParseMode.HTML,
             )
-        except aiohttp.ClientError as e:
+        except urllib.error.URLError as e:
             await message.edit_text(
-                f"❌ Ошибка сети: {e}",
+                f"❌ Ошибка сети: {e.reason}",
                 parse_mode=ParseMode.HTML,
             )
         except Exception as e:
