@@ -20,7 +20,8 @@ class Config:
 
     # Paths
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-    SCRIPTS_DIR = os.path.join(BASE_DIR, "scripts")
+    SCRIPTS_DIR = os.path.join(BASE_DIR, "scripts")            # built-in scripts (tracked)
+    CUSTOM_SCRIPTS_DIR = os.path.join(BASE_DIR, "scripts_custom")  # user scripts (gitignored)
     BACKUPS_DIR = os.path.join(BASE_DIR, "backups")
 
     # Loaded scripts

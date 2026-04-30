@@ -5,7 +5,7 @@ import importlib
 import traceback
 import logging
 from datetime import datetime
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Tuple
 
 from config import Config
 
@@ -13,24 +13,72 @@ logger = logging.getLogger("userbot.loader")
 
 
 class ScriptLoader:
-    """Dynamic .py script loader for the userbot."""
+    """
+    Dynamic .py script loader for the userbot.
+
+    Two directories:
+      - scripts/            built-in scripts (tracked in git, read-only)
+      - scripts_custom/     user-created scripts (gitignored, can be saved/deleted)
+    Custom scripts override built-in ones by filename.
+    """
 
     def __init__(self):
-        self.scripts_dir = Config.SCRIPTS_DIR
-        os.makedirs(self.scripts_dir, exist_ok=True)
+        self.builtin_dir = Config.SCRIPTS_DIR
+        self.custom_dir = Config.CUSTOM_SCRIPTS_DIR
+        os.makedirs(self.builtin_dir, exist_ok=True)
+        os.makedirs(self.custom_dir, exist_ok=True)
+
+    # ── helpers ──────────────────────────────────────────────────────────
+
+    def _scan_dir(self, directory: str) -> list:
+        """Return .py filenames (excluding _) from a directory."""
+        if not os.path.exists(directory):
+            return []
+        return sorted(
+            f for f in os.listdir(directory)
+            if f.endswith(".py") and not f.startswith("_")
+        )
+
+    def _resolve_filepath(self, filename: str) -> Optional[Tuple[str, bool]]:
+        """
+        Find the real path for *filename*.
+
+        Returns (absolute_path, is_custom) or None if not found anywhere.
+        Priority: scripts_custom/ > scripts/
+        """
+        custom_path = os.path.join(self.custom_dir, filename)
+        if os.path.exists(custom_path):
+            return custom_path, True
+        builtin_path = os.path.join(self.builtin_dir, filename)
+        if os.path.exists(builtin_path):
+            return builtin_path, False
+        return None
+
+    # ── public API ───────────────────────────────────────────────────────
 
     def get_available_scripts(self) -> list:
-        scripts = []
-        if os.path.exists(self.scripts_dir):
-            for f in os.listdir(self.scripts_dir):
-                if f.endswith(".py") and not f.startswith("_"):
-                    scripts.append(f)
-        return sorted(scripts)
+        """Return deduplicated list of .py files (custom overrides builtin)."""
+        builtin = set(self._scan_dir(self.builtin_dir))
+        custom = set(self._scan_dir(self.custom_dir))
+        all_files = builtin | custom
+        return sorted(all_files)
+
+    def is_custom_script(self, filename: str) -> bool:
+        """Return True if the script lives in scripts_custom/."""
+        custom_path = os.path.join(self.custom_dir, filename)
+        return os.path.exists(custom_path)
+
+    def is_builtin_script(self, filename: str) -> bool:
+        """Return True if a built-in (tracked) script exists with this name."""
+        builtin_path = os.path.join(self.builtin_dir, filename)
+        return os.path.exists(builtin_path)
 
     def get_script_info(self, filename: str) -> Optional[Dict[str, Any]]:
-        filepath = os.path.join(self.scripts_dir, filename)
-        if not os.path.exists(filepath):
+        resolved = self._resolve_filepath(filename)
+        if resolved is None:
             return None
+
+        filepath, is_custom = resolved
 
         try:
             with open(filepath, "r", encoding="utf-8") as f:
@@ -39,7 +87,7 @@ class ScriptLoader:
             tree = ast.parse(source)
             docstring = ast.get_docstring(tree) or ""
 
-            info = {"name": filename.replace(".py", "")}
+            info: Dict[str, Any] = {"name": filename.replace(".py", "")}
 
             for line in docstring.split("\n"):
                 line = line.strip()
@@ -63,6 +111,7 @@ class ScriptLoader:
             mtime = os.path.getmtime(filepath)
             info["modified"] = datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M:%S")
             info["lines"] = len(source.splitlines())
+            info["is_custom"] = is_custom
 
             return info
         except Exception as e:
@@ -70,9 +119,10 @@ class ScriptLoader:
             return None
 
     def get_script_source(self, filename: str) -> Optional[str]:
-        filepath = os.path.join(self.scripts_dir, filename)
-        if not os.path.exists(filepath):
+        resolved = self._resolve_filepath(filename)
+        if resolved is None:
             return None
+        filepath, _ = resolved
         try:
             with open(filepath, "r", encoding="utf-8") as f:
                 return f.read()
@@ -80,17 +130,19 @@ class ScriptLoader:
             return None
 
     def load_script(self, filename: str, client=None) -> Dict[str, Any]:
-        filepath = os.path.join(self.scripts_dir, filename)
-
-        if not os.path.exists(filepath):
+        resolved = self._resolve_filepath(filename)
+        if resolved is None:
             return {"success": False, "error": f"File {filename} not found"}
+
+        filepath, is_custom = resolved
 
         if filename in Config.loaded_modules:
             return {"success": False, "error": f"Script {filename} already loaded"}
 
         try:
-            if self.scripts_dir not in sys.path:
-                sys.path.insert(0, self.scripts_dir)
+            file_dir = os.path.dirname(filepath)
+            if file_dir not in sys.path:
+                sys.path.insert(0, file_dir)
 
             module_name = f"userbot_scripts_{filename.replace('.py', '')}"
 
@@ -123,7 +175,7 @@ class ScriptLoader:
             info = self.get_script_info(filename) or {}
             Config.loaded_modules_info[filename] = info
 
-            logger.info(f"Script {filename} loaded successfully")
+            logger.info(f"Script {filename} loaded successfully ({'custom' if is_custom else 'builtin'})")
             return {"success": True, "info": info}
 
         except Exception as e:
@@ -163,27 +215,41 @@ class ScriptLoader:
             return {"success": False, "error": error_msg}
 
     def delete_script(self, filename: str) -> Dict[str, Any]:
-        filepath = os.path.join(self.scripts_dir, filename)
-        if not os.path.exists(filepath):
-            return {"success": False, "error": f"File {filename} not found"}
-        if filename in Config.loaded_modules:
-            self.unload_script(filename)
-        try:
-            os.remove(filepath)
-            logger.info(f"Script {filename} deleted")
-            return {"success": True}
-        except Exception as e:
-            return {"success": False, "error": str(e)}
+        """
+        Delete a script.  Only custom scripts can be deleted;
+        built-in scripts are protected.
+        """
+        custom_path = os.path.join(self.custom_dir, filename)
+        if os.path.exists(custom_path):
+            if filename in Config.loaded_modules:
+                self.unload_script(filename)
+            try:
+                os.remove(custom_path)
+                logger.info(f"Custom script {filename} deleted")
+                return {"success": True}
+            except Exception as e:
+                return {"success": False, "error": str(e)}
+
+        # check if it exists as builtin
+        if self.is_builtin_script(filename):
+            return {"success": False, "error": f"Cannot delete built-in script {filename}"}
+
+        return {"success": False, "error": f"File {filename} not found"}
 
     def save_script(self, filename: str, source: str) -> Dict[str, Any]:
+        """
+        Save a script.  Always saves into scripts_custom/ so that
+        built-in scripts are never overwritten and .gitignore needs
+        no further changes.
+        """
         if not filename.endswith(".py"):
             return {"success": False, "error": "File must have .py extension"}
-        filepath = os.path.join(self.scripts_dir, filename)
+        filepath = os.path.join(self.custom_dir, filename)
         try:
             compile(source, filename, "exec")
             with open(filepath, "w", encoding="utf-8") as f:
                 f.write(source)
-            logger.info(f"Script {filename} saved ({len(source)} chars)")
+            logger.info(f"Script {filename} saved to scripts_custom/ ({len(source)} chars)")
             return {"success": True}
         except SyntaxError as e:
             return {"success": False, "error": f"Syntax error (line {e.lineno}): {e.msg}"}
@@ -199,10 +265,18 @@ class ScriptLoader:
         saved_count = 0
         import shutil
 
-        for f in self.get_available_scripts():
-            src = os.path.join(self.scripts_dir, f)
+        # backup custom scripts
+        for f in self._scan_dir(self.custom_dir):
+            src = os.path.join(self.custom_dir, f)
             if os.path.exists(src):
-                shutil.copy2(src, os.path.join(backup_dir, f))
+                shutil.copy2(src, os.path.join(backup_dir, f"custom_{f}"))
+                saved_count += 1
+
+        # backup builtin scripts
+        for f in self._scan_dir(self.builtin_dir):
+            src = os.path.join(self.builtin_dir, f)
+            if os.path.exists(src):
+                shutil.copy2(src, os.path.join(backup_dir, f"builtin_{f}"))
                 saved_count += 1
 
         for f in os.listdir(Config.BASE_DIR):

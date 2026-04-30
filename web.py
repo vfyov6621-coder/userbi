@@ -76,6 +76,7 @@ def create_web_app():
             "filename": filename,
             "source": source,
             "loaded": filename in Config.loaded_modules,
+            "is_custom": loader.is_custom_script(filename),
         })
 
     @app.route("/api/scripts", methods=["POST"])

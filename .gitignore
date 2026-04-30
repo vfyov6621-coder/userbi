@@ -1,1 +1,6 @@
-translator_fixed.py
+scripts_custom/
+backups/
+*.session
+*.session-journal
+__pycache__/
+.env
