@@ -9,6 +9,7 @@ import os
 import json
 import asyncio
 import urllib.request
+import urllib.parse
 import urllib.error
 
 WHITELIST_FILE = os.path.join(
@@ -192,7 +193,7 @@ def register(client):
         )
 
         try:
-            url = f"https://wttr.in/{city}?format=j1&lang=ru"
+            url = f"https://wttr.in/{urllib.parse.quote(city)}?format=j1&lang=ru"
 
             def _fetch():
                 req = urllib.request.Request(url, headers={"User-Agent": "curl/7.68.0"})
