@@ -141,7 +141,32 @@ def create_web_app():
         result = loader.delete_script(filename)
         if result["success"]:
             Config.add_log(f"Script {filename} deleted via web panel")
+            # Also remove from auto-start list
+            Config.set_auto_start(filename, False)
         return jsonify(result)
+
+    @app.route("/api/autostart", methods=["GET"])
+    def get_autostart():
+        """Return the list of scripts configured for auto-start."""
+        return jsonify({"success": True, "scripts": Config.get_auto_start()})
+
+    @app.route("/api/autostart/<path:filename>", methods=["POST"])
+    def toggle_autostart(filename):
+        """Toggle auto-start for a specific script. Body: {\"enabled\": true/false}"""
+        if not filename:
+            return jsonify({"success": False, "error": "Filename is empty"}), 400
+        if not filename.endswith(".py"):
+            filename += ".py"
+        data = request.get_json(silent=True) or {}
+        enabled = bool(data.get("enabled", True))
+        loader = ScriptLoader()
+        # Verify the script exists
+        if not loader.get_script_source(filename):
+            return jsonify({"success": False, "error": f"Script {filename} not found"}), 404
+        ok = Config.set_auto_start(filename, enabled)
+        if ok:
+            Config.add_log(f"Auto-start {'enabled' if enabled else 'disabled'} for {filename}")
+        return jsonify({"success": ok})
 
     @app.route("/api/debug/backup", methods=["POST"])
     def create_backup():

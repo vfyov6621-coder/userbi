@@ -50,6 +50,12 @@
         .btn-success { color:var(--green); }
         .btn-success:hover { border-color:var(--green); background:var(--green-bg); }
         .btn-sm { padding:5px 10px; font-size:11px; }
+        .toggle { position:relative; width:40px; height:22px; cursor:pointer; display:inline-block; vertical-align:middle; }
+        .toggle input { opacity:0; width:0; height:0; }
+        .toggle .slider { position:absolute; inset:0; background:var(--bg-tertiary); border:1px solid var(--border); border-radius:99px; transition:all .2s; }
+        .toggle .slider::before { content:''; position:absolute; width:16px; height:16px; left:2px; bottom:2px; background:var(--text-muted); border-radius:50%; transition:all .2s; }
+        .toggle input:checked + .slider { background:var(--accent-glow); border-color:var(--accent); }
+        .toggle input:checked + .slider::before { transform:translateX(18px); background:var(--accent); }
         .console-output { background:var(--bg-primary); border:1px solid var(--border); border-radius:var(--radius-sm); padding:16px; height:500px; overflow-y:auto; font-size:12px; line-height:1.8; font-family:'SF Mono','Fira Code',monospace; scroll-behavior:smooth; }
         .console-output::-webkit-scrollbar { width:6px; }
         .console-output::-webkit-scrollbar-thumb { background:var(--border); border-radius:3px; }
@@ -152,7 +158,7 @@
             </div>
             <div class="card">
                 <div class="card-body" style="padding:0">
-                    <table class="scripts-table"><thead><tr><th>Name</th><th>Status</th><th>Size</th><th>Modified</th><th>Actions</th></tr></thead><tbody id="scripts-tbody"></tbody></table>
+                    <table class="scripts-table"><thead><tr><th>Name</th><th>Status</th><th>Auto</th><th>Size</th><th>Modified</th><th>Actions</th></tr></thead><tbody id="scripts-tbody"></tbody></table>
                     <div class="empty-state" id="scripts-empty" style="display:none"><div class="icon">&#128451;</div><p>No scripts. Create new or add .py files to scripts/</p></div>
                 </div>
             </div>
@@ -195,6 +201,7 @@
 <script>
 let currentEditorFile=null;
 let logsPolling=null;
+let autostartCache=[];
 async function api(method,path,body){
     const opts={method,headers:{'Content-Type':'application/json'}};
     if(body)opts.body=JSON.stringify(body);
@@ -236,16 +243,20 @@ async function execCmd(){
     output.scrollTop=output.scrollHeight;
 }
 async function loadScripts(){
-    const data=await api('GET','/scripts');if(!data)return;
+    const [scriptsData, autostartData] = await Promise.all([api('GET','/scripts'), api('GET','/autostart')]);
+    if(!scriptsData) return;
+    autostartCache = autostartData?.scripts || [];
     const tbody=document.getElementById('scripts-tbody');const empty=document.getElementById('scripts-empty');
-    if(data.scripts.length===0){tbody.innerHTML='';empty.style.display='block';return;}
+    if(scriptsData.scripts.length===0){tbody.innerHTML='';empty.style.display='block';return;}
     empty.style.display='none';let html='';
-    data.scripts.forEach(s=>{
+    scriptsData.scripts.forEach(s=>{
         const fn=s.filename||'';if(!fn)return;
         const statusClass=s.loaded?'loaded':'unloaded';const statusText=s.loaded?'Loaded':'Not loaded';
+        const isAuto=autostartCache.includes(fn);
         html+=`<tr>
             <td class="script-name">${escapeHtml(s.name||fn)}</td>
             <td><span class="script-status ${statusClass}"><span class="dot"></span>${statusText}</span></td>
+            <td><label class="toggle" title="Auto-start"><input type="checkbox" ${isAuto?'checked':''} onchange="toggleAutostart('${escapeHtml(fn)}',this.checked)"><span class="slider"></span></label></td>
             <td style="color:var(--text-secondary);font-size:12px">${escapeHtml(s.size||'N/A')}</td>
             <td style="color:var(--text-secondary);font-size:12px">${escapeHtml(s.modified||'N/A')}</td>
             <td><div class="script-actions">
@@ -255,6 +266,14 @@ async function loadScripts(){
             </div></td></tr>`;
     });
     tbody.innerHTML=html;
+}
+async function toggleAutostart(filename,enabled){
+    const data=await api('POST',`/autostart/${encodeURIComponent(filename)}`,{enabled});
+    if(data.success){
+        if(enabled && !autostartCache.includes(filename)) autostartCache.push(filename);
+        else if(!enabled) autostartCache=autostartCache.filter(f=>f!==filename);
+        toast(enabled?`Auto-start ON: ${filename}`:`Auto-start OFF: ${filename}`,true);
+    } else { toast(data.error||'Error',false); loadScripts(); }
 }
 async function loadScript(filename){
     if(!filename){toast('Empty filename',false);return;}

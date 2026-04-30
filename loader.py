@@ -56,6 +56,18 @@ class ScriptLoader:
 
     # ── public API ───────────────────────────────────────────────────────
 
+    def auto_load_all(self, client=None) -> Dict[str, Any]:
+        """Load all scripts listed in auto_start.json."""
+        scripts = Config.get_auto_start()
+        loaded, failed = [], []
+        for filename in scripts:
+            result = self.load_script(filename, client)
+            if result["success"]:
+                loaded.append(filename)
+            else:
+                failed.append({"file": filename, "error": result.get("error", "?")})
+        return {"success": True, "loaded": loaded, "failed": failed, "total": len(scripts)}
+
     def get_available_scripts(self) -> list:
         """Return deduplicated list of .py files (custom overrides builtin)."""
         builtin = set(self._scan_dir(self.builtin_dir))

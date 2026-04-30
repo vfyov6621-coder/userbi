@@ -192,6 +192,20 @@ async def run_bot():
         MessageHandler(lm_command, filters.command("lm", prefixes=".") & filters.me)
     )
 
+    # ── Auto-start scripts ───────────────────────────────────────────
+    loader = ScriptLoader()
+    auto_result = loader.auto_load_all(client)
+    if auto_result["total"] > 0:
+        Config.add_log(
+            f"Auto-start: {len(auto_result['loaded'])}/{auto_result['total']} scripts loaded"
+        )
+        for fail in auto_result.get("failed", []):
+            Config.add_log(
+                f"Auto-start failed: {fail['file']} — {fail['error']}", "WARNING"
+            )
+    else:
+        Config.add_log("Auto-start: no scripts configured")
+
     try:
         async with client:
             me = await client.get_me()
