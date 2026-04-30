@@ -11,6 +11,7 @@ from deep_translator import GoogleTranslator
 def register(client):
     """Register handlers when script is loaded."""
     from pyrogram import filters
+    from pyrogram.enums import ParseMode
     from pyrogram.types import Message
     import asyncio
 
@@ -39,7 +40,7 @@ def register(client):
 
             await message.edit_text(
                 f"<b>Перевод:</b>\n\n<code>{translated}</code>",
-                parse_mode="html"
+                parse_mode=ParseMode.HTML
             )
 
         except Exception as e:
