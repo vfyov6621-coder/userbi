@@ -463,17 +463,17 @@ class ScriptLoader:
         """Get all tabs from loaded folder scripts."""
         tabs = []
         for script_id, module in Config.loaded_modules.items():
-            if script_id in Config.loaded_addons:
-                # It's a folder script
-                meta = self.get_script_meta(script_id)
-                if meta and meta.get("tabs"):
-                    for tab in meta["tabs"]:
-                        tabs.append({
-                            "id": tab["id"],
-                            "name": tab.get("name", tab["id"]),
-                            "icon": tab.get("icon", ""),
-                            "script_id": script_id,
-                        })
+            if not self.is_folder_script(script_id):
+                continue
+            meta = self.get_script_meta(script_id)
+            if meta and meta.get("tabs"):
+                for tab in meta["tabs"]:
+                    tabs.append({
+                        "id": tab["id"],
+                        "name": tab.get("name", tab["id"]),
+                        "icon": tab.get("icon", ""),
+                        "script_id": script_id,
+                    })
         return tabs
 
     def get_tab_data(self, tab_id: str, **params) -> Any:
