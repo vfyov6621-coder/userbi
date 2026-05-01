@@ -176,10 +176,6 @@ def register(client):
         except Exception:
             pass
 
-    @client.on_user_status(group=-1)
-    async def _noop(client, user, status):
-        pass  # workaround for some pyrofork versions
-
     # ── .dl command ───────────────────────────────────────────────
     @client.on_message(filters.command("dl", prefixes=".") & filters.me)
     async def dl_handler(client, message: Message):
