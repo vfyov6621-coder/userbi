@@ -25,7 +25,7 @@ PHOTO_FILE = os.path.join(Config.CUSTOM_SCRIPTS_DIR, "bot_photo.jpg")
 
 
 # ═══════════════════════════════════════════════════════════════════════
-#  .mm  —  built-in menu
+#  Helpers
 # ═══════════════════════════════════════════════════════════════════════
 
 def _load_info() -> dict:
@@ -38,11 +38,21 @@ def _load_info() -> dict:
     return {"name": BOT_NAME, "bio": "", "owner": "", "info": "Инфо не настроена."}
 
 
+def _is_owner(user_id: int, client: Client) -> bool:
+    """Owner = the userbot account itself."""
+    return user_id == client.me.id if client.me else False
+
+
+# ═══════════════════════════════════════════════════════════════════════
+#  .mm  —  built-in menu
+# ═══════════════════════════════════════════════════════════════════════
+
 MM_KEYBOARD = InlineKeyboardMarkup(
     [
         [InlineKeyboardButton("📷 Фото", callback_data="mm_photo")],
         [InlineKeyboardButton("🏓 Пинг", callback_data="mm_ping")],
         [InlineKeyboardButton("ℹ️ Инфо", callback_data="mm_info")],
+        [InlineKeyboardButton("👤 Владелец", callback_data="mm_owner")],
     ]
 )
 
@@ -64,6 +74,7 @@ async def mm_command(client: Client, message: Message):
 async def mm_callback(client: Client, callback: CallbackQuery):
     """Handle inline keyboard presses from .mm menu."""
     data = callback.data
+    from_user_id = callback.from_user.id
 
     # ── Photo ──────────────────────────────────────────────────────
     if data == "mm_photo":
@@ -107,8 +118,81 @@ async def mm_callback(client: Client, callback: CallbackQuery):
         await callback.message.edit_text(text, parse_mode=ParseMode.HTML)
         await callback.answer(show_alert=False)
 
+    # ── Owner (owner only) ─────────────────────────────────────────
+    elif data == "mm_owner":
+        if not _is_owner(from_user_id, client):
+            await callback.answer("⛔ Только для владельца", show_alert=True)
+            return
+
+        me = client.me
+        text = (
+            f"👤 <b>Владелец</b>\n\n"
+            f"📌 Имя: <b>{me.first_name}</b>\n"
+            f"📌 ID: <code>{me.id}</code>\n"
+        )
+        if me.username:
+            text += f"📌 Username: @{me.username}\n"
+        if me.last_name:
+            text += f"📌 Фамилия: {me.last_name}\n"
+        if me.bio:
+            text += f"📌 Bio: <i>{me.bio}</i>\n"
+
+        text += (
+            f"\n📌 Статус: <code>{me.status.value if me.status else '?'}</code>\n"
+            f"📌 Премиум: {'✅' if me.is_premium else '❌'}"
+        )
+
+        await callback.message.edit_text(text, parse_mode=ParseMode.HTML)
+        await callback.answer(show_alert=False)
+
     else:
         await callback.answer()
+
+
+# ═══════════════════════════════════════════════════════════════════════
+#  .mf  —  set menu photo from reply
+# ═══════════════════════════════════════════════════════════════════════
+
+async def mf_command(client: Client, message: Message):
+    """Reply to a photo to set it as the bot menu photo."""
+    if not message.reply_to_message:
+        await message.edit_text(
+            "❌ Ответьте на сообщение с фото:\n<code>.mf</code> (ответ на фото)",
+            parse_mode=ParseMode.HTML,
+        )
+        return
+
+    reply = message.reply_to_message
+    if not reply.photo and not reply.sticker:
+        await message.edit_text(
+            "❌ В ответе должно быть фото или стикер",
+            parse_mode=ParseMode.HTML,
+        )
+        return
+
+    await message.edit_text("📸 Сохранение фото...", parse_mode=ParseMode.HTML)
+
+    try:
+        os.makedirs(os.path.dirname(PHOTO_FILE), exist_ok=True)
+
+        # Download photo (best quality = last item)
+        if reply.photo:
+            file = await client.download_media(reply.photo.file_id, file_name=PHOTO_FILE)
+        else:
+            # sticker — download as jpg
+            file = await client.download_media(reply.sticker.file_id, file_name=PHOTO_FILE)
+
+        if file:
+            await message.edit_text(
+                "✅ Фото установлено!\n\n"
+                "Теперь <code>.mm</code> → 📷 Фото отправит это изображение.",
+                parse_mode=ParseMode.HTML,
+            )
+        else:
+            await message.edit_text("❌ Не удалось скачать фото", parse_mode=ParseMode.HTML)
+
+    except Exception as e:
+        await message.edit_text(f"❌ Ошибка: {e}", parse_mode=ParseMode.HTML)
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -300,6 +384,9 @@ async def run_bot():
     )
     client.add_handler(
         CallbackQueryHandler(mm_callback, filters.regex(r"^mm_"))
+    )
+    client.add_handler(
+        MessageHandler(mf_command, filters.command("mf", prefixes=".") & filters.me & filters.reply)
     )
     client.add_handler(
         MessageHandler(lm_command, filters.command("lm", prefixes=".") & filters.me)
