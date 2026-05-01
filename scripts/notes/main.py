@@ -1,16 +1,12 @@
-"""
-Name: Notes
-Version: 1.0
-Author: UserBot
-Description: Quick notes in Telegram. .note save <name> <text>, .note get <name>, .note list, .note del <name>
-  Also: .note set — save from reply, .n <name> — shortcut for .note get
+"""Notes - main module
+Quick notes in Telegram. .note save/get/list/del/set, .n <name>
 """
 
 import os
 import json
 
 NOTES_FILE = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
     "scripts_custom",
     "notes.json",
 )
@@ -55,7 +51,6 @@ def register(client):
 
         action = args[1].lower()
 
-        # ── .note list ─────────────────────────────────────────────
         if action == "list":
             notes = _load()
             if not notes:
@@ -73,7 +68,6 @@ def register(client):
             )
             return
 
-        # ── .note del ──────────────────────────────────────────────
         if action == "del":
             if len(args) < 3:
                 await message.edit_text("❌ <code>.note del &lt;имя&gt;</code>", parse_mode=ParseMode.HTML)
@@ -88,7 +82,6 @@ def register(client):
                 await message.edit_text(f"❌ Заметка <b>{name}</b> не найдена", parse_mode=ParseMode.HTML)
             return
 
-        # ── .note get ──────────────────────────────────────────────
         if action == "get":
             if len(args) < 3:
                 await message.edit_text("❌ <code>.note get &lt;имя&gt;</code>", parse_mode=ParseMode.HTML)
@@ -105,7 +98,6 @@ def register(client):
                 await message.edit_text(f"❌ Заметка <b>{name}</b> не найдена", parse_mode=ParseMode.HTML)
             return
 
-        # ── .note set <name> (reply) ──────────────────────────────
         if action == "set":
             if len(args) < 3:
                 await message.edit_text("❌ <code>.note set &lt;имя&gt;</code> (ответ на соо)", parse_mode=ParseMode.HTML)
@@ -125,7 +117,6 @@ def register(client):
             await message.edit_text(f"✅ Заметка <b>{name}</b> сохранена", parse_mode=ParseMode.HTML)
             return
 
-        # ── .note save <name> <text> ──────────────────────────────
         if action == "save":
             if len(args) < 3:
                 await message.edit_text("❌ <code>.note save &lt;имя&gt; &lt;текст&gt;</code>", parse_mode=ParseMode.HTML)
@@ -145,7 +136,6 @@ def register(client):
 
         await message.edit_text("❌ Неизвестное действие. .note для справки", parse_mode=ParseMode.HTML)
 
-    # ── shortcut: .n <name> ───────────────────────────────────────
     @client.on_message(filters.command("n", prefixes=".") & filters.me)
     async def n_shortcut(client, message: Message):
         args = message.text.split(maxsplit=1)

@@ -1,8 +1,5 @@
-"""
-Name: TimeName
-Version: 1.0
-Author: UserBot
-Description: Adds MSK time to profile name. Usage: .tn on / .tn off
+"""TimeName - main module
+Adds MSK time to profile name. Usage: .tn on / .tn off
 """
 
 import os
@@ -33,7 +30,6 @@ def register(client):
             if TASK_KEY in _tasks:
                 _tasks[TASK_KEY].cancel()
                 del _tasks[TASK_KEY]
-            # restore original name
             try:
                 original = _original_name.get(message.from_user.id, "")
                 if original:
@@ -53,7 +49,6 @@ def register(client):
             me = await client.get_me()
             full = me.first_name or ""
 
-            # remove old time suffix if any
             for sep in [" | ", " |", "| "]:
                 if sep in full:
                     full = full.split(sep)[0].strip()
@@ -73,7 +68,10 @@ def register(client):
 
             name = f"{full} | {_get_time()}"
             await client.update_profile(first_name=name)
-            await message.edit_text(f"✅ Время в нике включено\n\n<i>Оригинал: {full}</i>\n<b>{name}</b>", parse_mode=ParseMode.HTML)
+            await message.edit_text(
+                f"✅ Время в нике включено\n\n<i>Оригинал: {full}</i>\n<b>{name}</b>",
+                parse_mode=ParseMode.HTML,
+            )
             return
 
         await message.edit_text(
@@ -84,7 +82,6 @@ def register(client):
         )
 
 
-# module-level dicts (shared across all scripts)
 _tasks = {}
 _original_name = {}
 

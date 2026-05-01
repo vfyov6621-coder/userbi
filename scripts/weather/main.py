@@ -1,8 +1,6 @@
 """
-Name: Weather
-Version: 4.0
-Author: UserBot
-Description: Weather info with ASCII art. Usage: .wea <city>
+Weather - main module
+Weather info with ASCII art. Usage: .wea <city>
 """
 
 import asyncio
@@ -42,7 +40,6 @@ WMO = {
     99: ("Сильная гроза",       "thunder"),
 }
 
-# mapped from above keys
 ART = {
     "sun": (
         "    \\   /    \n"

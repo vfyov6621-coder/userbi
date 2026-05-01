@@ -1,0 +1,11 @@
+{
+  "name": "Deleted Logger",
+  "version": "1.0",
+  "author": "Zaya",
+  "description": "Логгер удалённых сообщений с веб-панелью",
+  "command": ".dl",
+  "addons": [],
+  "tabs": [
+    {"id": "deleted_logger", "name": "Удалённые", "icon": "🗑"}
+  ]
+}

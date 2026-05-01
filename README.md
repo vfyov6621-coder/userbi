@@ -1,37 +1,104 @@
-# TG UserBot
+# Zaya — Telegram UserBot
 
-Telegram userbot with dynamic script loading, web panel, and Heroku support.
+Юзербот на Pyrofork с динамической загрузкой скриптов, веб-панелью и поддержкой Heroku.
 
-## Setup
+## Функции
 
-1. Copy `.env.example` to `.env` and fill in your API credentials
-2. Run `start.bat` (Windows) or `bash start.sh` (Linux)
-3. Open http://localhost:8080 for web panel
+- **Папочная система скриптов** — каждый скрипт в отдельной папке с `meta.json`
+- **Аддоны** — дополнения к скриптам (переводчик: RU, DE, ZH, FR, UK, BE)
+- **Веб-вкладки** — скрипты могут добавлять свои вкладки в веб-панель
+- **Логгер удалённых** — кеширование и логирование удалённых сообщений
+- **Автозапуск** — скрипты загружаются автоматически при старте
+- **Веб-панель** — консоль, управление скриптами, бэкапы, дебаг
 
-## Commands (in Telegram)
+## Установка
 
-- `.lm` - show help
-- `.lm load <file>` - load a script
-- `.lm unload <file>` - unload a script
-- `.lm reload <file>` - reload a script
-- `.lm list` - list all scripts
-- `.lm info <file>` - script info
-- `.lm unload_all` - unload all scripts
+1. Клонируйте репозиторий
+2. Скопируйте `.env.example` в `.env` и заполните API данные
+3. Установите зависимости: `pip install -r requirements.txt`
+4. Запустите: `bash start.sh` (Linux) или `start.bat` (Windows)
+5. Веб-панель: http://localhost:8080
 
-## Script Format
+## Встроенные команды (Telegram)
 
-Scripts go in `scripts/` folder as `.py` files.
+| Команда | Описание |
+|---------|----------|
+| `.mm` | Меню бота (фото, пинг, инфо, владелец) |
+| `.mf` | Установить фото меню (ответ на фото) |
+| `.lm` | Управление скриптами |
+| `.lm list` | Список скриптов |
+| `.lm load <id>` | Загрузить скрипт |
+| `.lm unload <id>` | Выгрузить скрипт |
+| `.lm reload <id>` | Перезагрузить скрипт |
+| `.lm info <id>` | Информация о скрипте |
 
-```python
-def register(client):
-    from pyrogram import filters
-    @client.on_message(filters.command("cmd", prefixes=".") & filters.me)
-    async def handler(client, message):
-        await message.edit_text("Hello!")
+## Скрипты
 
-def on_load():
-    print("Loaded")
+| Скрипт | Команда | Описание |
+|--------|---------|----------|
+| Translator | `.tr` | Переводчик (generic: любой язык) |
+| .tra | `.tra` | Перевод на русский (ответ) |
+| .trd | `.trd` | Перевод на немецкий |
+| .trz | `.trz` | Перевод на китайский |
+| .trf | `.trf` | Перевод на французский |
+| .tru | `.tru` | Перевод на украинский |
+| .trb | `.trb` | Перевод на белорусский |
+| Weather | `.wea` | Погода с ASCII-артом |
+| Notes | `.note` | Быстрые заметки |
+| Ping | `.ping` | Пинг юзербота |
+| TimeName | `.tn` | Время МСК в нике |
+| Deleted Logger | `.dl` | Логгер удалённых сообщений |
 
-def on_unload():
-    print("Unloaded")
+## Структура проекта
+
 ```
+userbot/
+├── main.py              — точка входа
+├── bot.py               — ядро юзербота (.mm, .mf, .lm)
+├── config.py            — конфигурация
+├── loader.py            — загрузчик скриптов
+├── web.py               — Flask API для веб-панели
+├── templates/
+│   └── index.html       — веб-панель (SPA)
+├── scripts/             — встроенные скрипты (git-tracked)
+│   ├── translator/
+│   │   ├── meta.json
+│   │   ├── main.py
+│   │   └── addons/
+│   │       ├── ru.py
+│   │       ├── de.py
+│   │       ├── zh.py
+│   │       ├── fr.py
+│   │       ├── uk.py
+│   │       └── be.py
+│   ├── weather/
+│   ├── notes/
+│   ├── ping/
+│   ├── time_name/
+│   └── deleted_logger/
+├── scripts_custom/      — пользовательские скрипты (gitignored)
+├── backups/             — бэкапы (gitignored)
+├── requirements.txt
+├── Procfile
+└── SCRIPTS.md           — документация по скриптам
+```
+
+## Документация по скриптам
+
+Подробное руководство по созданию скриптов: [SCRIPTS.md](SCRIPTS.md)
+
+## Развертывание на Heroku
+
+1. Создайте приложение на Heroku
+2. Добавьте переменные окружения: `API_ID`, `API_HASH`, `PHONE` (или `SESSION_STRING`)
+3. Деплой через GitHub
+
+## Зависимости
+
+- Python 3.9+
+- pyrofork >= 2.3.0
+- flask == 3.0.3
+- gunicorn == 22.0.0
+- python-dotenv == 1.0.1
+- nest_asyncio == 1.6.0
+- deep-translator >= 1.9.0

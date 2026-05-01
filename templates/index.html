@@ -14,6 +14,7 @@
             --green: #3dd68c; --green-bg: rgba(61,214,140,0.1);
             --red: #ff6b6b; --red-bg: rgba(255,107,107,0.1);
             --yellow: #ffd93d; --yellow-bg: rgba(255,217,61,0.1);
+            --blue: #5b9cf5; --blue-bg: rgba(91,156,245,0.1);
             --radius: 12px; --radius-sm: 8px;
         }
         body { font-family: -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; background: var(--bg-primary); color: var(--text-primary); min-height: 100vh; }
@@ -21,13 +22,15 @@
         .sidebar-header { padding:24px 20px; border-bottom:1px solid var(--border); }
         .sidebar-header h1 { font-size:16px; font-weight:700; display:flex; align-items:center; gap:10px; }
         .sidebar-header .badge { background:var(--accent); color:white; font-size:10px; padding:2px 8px; border-radius:99px; font-weight:600; }
-        .sidebar-nav { padding:12px 10px; flex:1; }
+        .sidebar-nav { padding:12px 10px; flex:1; overflow-y:auto; }
+        .nav-section { font-size:10px; text-transform:uppercase; letter-spacing:1px; color:var(--text-muted); padding:12px 14px 6px; }
         .nav-item { display:flex; align-items:center; gap:12px; padding:12px 14px; border-radius:var(--radius-sm); cursor:pointer; color:var(--text-secondary); font-size:13px; font-weight:500; transition:all .15s; margin-bottom:2px; user-select:none; }
         .nav-item:hover { background:var(--bg-tertiary); color:var(--text-primary); }
         .nav-item.active { background:var(--accent-glow); color:var(--accent); }
         .nav-item .icon { font-size:18px; width:24px; text-align:center; }
         .nav-item .count { margin-left:auto; background:var(--bg-tertiary); color:var(--text-secondary); font-size:11px; padding:2px 8px; border-radius:99px; font-weight:600; }
         .nav-item.active .count { background:var(--accent); color:white; }
+        .nav-item .tab-badge { margin-left:auto; background:var(--red); color:white; font-size:10px; padding:2px 6px; border-radius:99px; font-weight:600; }
         .sidebar-footer { padding:16px 20px; border-top:1px solid var(--border); }
         .status-indicator { display:flex; align-items:center; gap:8px; font-size:12px; color:var(--text-secondary); }
         .status-dot { width:8px; height:8px; border-radius:50%; background:var(--green); box-shadow:0 0 8px var(--green); animation:pulse 2s infinite; }
@@ -49,7 +52,10 @@
         .btn-danger:hover { border-color:var(--red); background:var(--red-bg); }
         .btn-success { color:var(--green); }
         .btn-success:hover { border-color:var(--green); background:var(--green-bg); }
+        .btn-blue { color:var(--blue); }
+        .btn-blue:hover { border-color:var(--blue); background:var(--blue-bg); }
         .btn-sm { padding:5px 10px; font-size:11px; }
+        .btn-xs { padding:3px 8px; font-size:10px; }
         .toggle { position:relative; width:40px; height:22px; cursor:pointer; display:inline-block; vertical-align:middle; }
         .toggle input { opacity:0; width:0; height:0; }
         .toggle .slider { position:absolute; inset:0; background:var(--bg-tertiary); border:1px solid var(--border); border-radius:99px; transition:all .2s; }
@@ -76,7 +82,12 @@
         .script-status.loaded { background:var(--green-bg); color:var(--green); }
         .script-status.unloaded { background:var(--bg-tertiary); color:var(--text-muted); }
         .script-status .dot { width:6px; height:6px; border-radius:50%; background:currentColor; }
-        .script-actions { display:flex; gap:6px; }
+        .script-actions { display:flex; gap:6px; flex-wrap:wrap; }
+        .addon-row { display:flex; align-items:center; gap:8px; padding:6px 16px; font-size:12px; background:var(--bg-primary); border-bottom:1px solid var(--border); }
+        .addon-row:last-child { border-bottom:none; }
+        .addon-indicator { color:var(--text-muted); font-size:14px; }
+        .addon-name { flex:1; color:var(--text-secondary); }
+        .addon-cmd { color:var(--accent); font-size:11px; background:var(--accent-glow); padding:2px 8px; border-radius:4px; }
         .editor-container { display:none; margin-top:20px; }
         .editor-container.active { display:block; }
         .editor-filename { font-size:14px; color:var(--accent); font-weight:600; }
@@ -112,19 +123,54 @@
         .empty-state .icon { font-size:48px; margin-bottom:12px; opacity:.5; }
         .page { display:none; }
         .page.active { display:block; }
-        @media(max-width:768px) { .sidebar{width:60px} .sidebar-header h1 span,.nav-item span:not(.icon),.sidebar-footer .status-text{display:none} .nav-item{justify-content:center;padding:12px} .nav-item .count{display:none} .main{margin-left:60px;padding:16px} }
+
+        /* ── Logger Tab ─────────────────────────────────── */
+        .logger-layout { display:grid; grid-template-columns:300px 1fr; gap:20px; height:calc(100vh - 160px); }
+        .logger-chats { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; display:flex; flex-direction:column; }
+        .logger-chats-header { padding:16px; border-bottom:1px solid var(--border); font-size:13px; font-weight:600; }
+        .logger-chats-list { flex:1; overflow-y:auto; }
+        .logger-chat-item { padding:14px 16px; cursor:pointer; border-bottom:1px solid var(--border); transition:background .15s; }
+        .logger-chat-item:hover { background:var(--bg-tertiary); }
+        .logger-chat-item.active { background:var(--accent-glow); border-left:3px solid var(--accent); }
+        .logger-chat-title { font-size:13px; font-weight:500; margin-bottom:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .logger-chat-meta { font-size:11px; color:var(--text-muted); }
+        .logger-messages { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; display:flex; flex-direction:column; }
+        .logger-messages-header { padding:16px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; }
+        .logger-messages-header h3 { font-size:14px; font-weight:600; }
+        .logger-messages-list { flex:1; overflow-y:auto; padding:12px; }
+        .logger-msg { padding:12px 16px; border-radius:var(--radius-sm); margin-bottom:8px; background:var(--bg-secondary); border-left:3px solid var(--red); }
+        .logger-msg-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; }
+        .logger-msg-sender { font-size:12px; font-weight:600; color:var(--accent); }
+        .logger-msg-date { font-size:11px; color:var(--text-muted); }
+        .logger-msg-text { font-size:13px; line-height:1.5; word-break:break-word; }
+        .logger-msg-media { display:inline-flex; align-items:center; gap:4px; font-size:11px; color:var(--yellow); background:var(--yellow-bg); padding:2px 8px; border-radius:4px; margin-top:6px; }
+        .logger-msg-deleted { font-size:10px; color:var(--red); margin-top:4px; }
+        .logger-empty { display:flex; align-items:center; justify-content:center; height:100%; color:var(--text-muted); font-size:14px; }
+        .logger-status { display:flex; align-items:center; gap:8px; padding:12px 16px; border-bottom:1px solid var(--border); font-size:12px; }
+        .logger-status-dot { width:8px; height:8px; border-radius:50%; }
+        .logger-status-dot.on { background:var(--green); box-shadow:0 0 6px var(--green); }
+        .logger-status-dot.off { background:var(--red); }
+
+        @media(max-width:768px) {
+            .sidebar{width:60px} .sidebar-header h1 span,.nav-item span:not(.icon),.sidebar-footer .status-text,.nav-section{display:none} .nav-item{justify-content:center;padding:12px} .nav-item .count,.nav-item .tab-badge{display:none} .main{margin-left:60px;padding:16px}
+            .logger-layout { grid-template-columns:1fr; grid-template-rows:auto 1fr; height:auto; }
+            .logger-chats { max-height:200px; }
+        }
     </style>
 </head>
 <body>
 <div id="app">
     <div class="sidebar">
         <div class="sidebar-header">
-            <h1><span>&#128737;</span><span>Zaya</span><span class="badge">v1.0</span></h1>
+            <h1><span>&#128737;</span><span>Zaya</span><span class="badge">v2.0</span></h1>
         </div>
-        <div class="sidebar-nav">
-            <div class="nav-item active" onclick="showPage('console')"><span class="icon">&#128187;</span><span>Console</span></div>
-            <div class="nav-item" onclick="showPage('scripts')"><span class="icon">&#128196;</span><span>Scripts</span><span class="count" id="scripts-count">0</span></div>
+        <div class="sidebar-nav" id="sidebar-nav">
+            <div class="nav-section">Система</div>
+            <div class="nav-item active" onclick="showPage('console')"><span class="icon">&#128187;</span><span>Консоль</span></div>
+            <div class="nav-item" onclick="showPage('scripts')"><span class="icon">&#128196;</span><span>Скрипты</span><span class="count" id="scripts-count">0</span></div>
             <div class="nav-item" onclick="showPage('debug')"><span class="icon">&#128295;</span><span>Debug</span></div>
+            <div class="nav-section" id="nav-tabs-section" style="display:none">Вкладки скриптов</div>
+            <div id="nav-tabs-container"></div>
         </div>
         <div class="sidebar-footer">
             <div class="status-indicator">
@@ -134,107 +180,140 @@
         </div>
     </div>
     <div class="main">
+        <!-- Console Page -->
         <div class="page active" id="page-console">
             <div class="page-header">
-                <div><h2>&#128187; Console</h2><div class="subtitle">Userbot logs in real time</div></div>
-                <button class="btn btn-sm" onclick="clearLogs()">&#128465; Clear</button>
+                <div><h2>&#128187; Консоль</h2><div class="subtitle">Логи юзербота в реальном времени</div></div>
+                <button class="btn btn-sm" onclick="clearLogs()">&#128465; Очистить</button>
             </div>
             <div class="stats-row" id="console-stats"></div>
             <div class="card">
-                <div class="card-header"><h3>&#128220; Log Output</h3><span style="font-size:11px;color:var(--text-muted)" id="log-count-label">0 entries</span></div>
+                <div class="card-header"><h3>&#128220; Логи</h3><span style="font-size:11px;color:var(--text-muted)" id="log-count-label">0 записей</span></div>
                 <div class="card-body">
-                    <div class="console-output" id="console-output"><div class="empty-state"><div class="icon">&#128220;</div><p>Waiting for logs...</p></div></div>
+                    <div class="console-output" id="console-output"><div class="empty-state"><div class="icon">&#128220;</div><p>Ожидание логов...</p></div></div>
                     <div class="console-input-row">
-                        <input class="console-input" id="console-input" placeholder="Enter command (help, status, loaded_list)..." onkeydown="if(event.key==='Enter')execCmd()">
+                        <input class="console-input" id="console-input" placeholder="Команда (help, status, loaded_list)..." onkeydown="if(event.key==='Enter')execCmd()">
                         <button class="btn btn-primary" onclick="execCmd()">&#9654;</button>
                     </div>
                 </div>
             </div>
         </div>
+
+        <!-- Scripts Page -->
         <div class="page" id="page-scripts">
             <div class="page-header">
-                <div><h2>&#128196; Scripts</h2><div class="subtitle">Manage .py scripts</div></div>
-                <button class="btn btn-primary" onclick="openNewScriptModal()">+ New Script</button>
+                <div><h2>&#128196; Скрипты</h2><div class="subtitle">Управление скриптами и дополнениями</div></div>
+                <button class="btn btn-primary" onclick="openNewScriptModal()">+ Новый скрипт</button>
             </div>
             <div class="card">
                 <div class="card-body" style="padding:0">
-                    <table class="scripts-table"><thead><tr><th>Name</th><th>Status</th><th>Auto</th><th>Size</th><th>Modified</th><th>Actions</th></tr></thead><tbody id="scripts-tbody"></tbody></table>
-                    <div class="empty-state" id="scripts-empty" style="display:none"><div class="icon">&#128451;</div><p>No scripts. Create new or add .py files to scripts/</p></div>
+                    <table class="scripts-table"><thead><tr><th>Скрипт</th><th>Статус</th><th>Авто</th><th>Размер</th><th>Изменён</th><th>Действия</th></tr></thead><tbody id="scripts-tbody"></tbody></table>
+                    <div class="empty-state" id="scripts-empty" style="display:none"><div class="icon">&#128451;</div><p>Нет скриптов</p></div>
                 </div>
             </div>
             <div class="editor-container card" id="editor-container">
-                <div class="card-header"><h3>&#9998; Code Editor</h3><span class="editor-filename" id="editor-filename"></span></div>
+                <div class="card-header">
+                    <h3>&#9998; Редактор</h3>
+                    <span class="editor-filename" id="editor-filename"></span>
+                </div>
                 <div class="card-body">
                     <textarea class="code-editor" id="code-editor" spellcheck="false"></textarea>
                     <div style="display:flex;gap:10px;margin-top:12px;justify-content:flex-end">
-                        <button class="btn" onclick="closeEditor()">&#10005; Close</button>
-                        <button class="btn btn-primary" onclick="saveScript()">&#128190; Save</button>
+                        <button class="btn" onclick="closeEditor()">&#10005; Закрыть</button>
+                        <button class="btn btn-primary" onclick="saveScript()">&#128190; Сохранить</button>
                     </div>
                 </div>
             </div>
         </div>
+
+        <!-- Debug Page -->
         <div class="page" id="page-debug">
-            <div class="page-header"><div><h2>&#128295; Debug</h2><div class="subtitle">Backups, restart and diagnostics</div></div></div>
+            <div class="page-header"><div><h2>&#128295; Debug</h2><div class="subtitle">Бэкапы, перезапуск и диагностика</div></div></div>
             <div class="debug-grid">
-                <div class="debug-card"><div class="icon">&#128190;</div><h3>Create Backup</h3><p>Save copy of all scripts and session files.</p><button class="btn btn-success" onclick="createBackup()">&#128190; Create</button></div>
-                <div class="debug-card"><div class="icon">&#128260;</div><h3>Restart Scripts</h3><p>Unload and reload all active scripts.</p><button class="btn btn-primary" onclick="restartScripts()">&#128260; Restart</button></div>
-                <div class="debug-card"><div class="icon">&#128465;</div><h3>Unload All</h3><p>Stop all loaded scripts and free resources.</p><button class="btn btn-danger" onclick="unloadAll()">&#128465; Unload All</button></div>
+                <div class="debug-card"><div class="icon">&#128190;</div><h3>Создать бэкап</h3><p>Сохранить копию всех скриптов и сессий.</p><button class="btn btn-success" onclick="createBackup()">&#128190; Создать</button></div>
+                <div class="debug-card"><div class="icon">&#128260;</div><h3>Перезапуск</h3><p>Выгрузить и загрузить все активные скрипты.</p><button class="btn btn-primary" onclick="restartScripts()">&#128260; Перезапуск</button></div>
+                <div class="debug-card"><div class="icon">&#128465;</div><h3>Выгрузить все</h3><p>Остановить все загруженные скрипты.</p><button class="btn btn-danger" onclick="unloadAll()">&#128465; Выгрузить</button></div>
             </div>
             <div class="card">
-                <div class="card-header"><h3>&#128206; Backup History</h3><button class="btn btn-sm" onclick="loadBackups()">&#128260; Refresh</button></div>
-                <div class="card-body" style="padding:0"><div id="backups-list"></div><div class="empty-state" id="backups-empty" style="display:none"><div class="icon">&#128206;</div><p>No backups</p></div></div>
+                <div class="card-header"><h3>&#128206; История бэкапов</h3><button class="btn btn-sm" onclick="loadBackups()">&#128260; Обновить</button></div>
+                <div class="card-body" style="padding:0"><div id="backups-list"></div><div class="empty-state" id="backups-empty" style="display:none"><div class="icon">&#128206;</div><p>Нет бэкапов</p></div></div>
             </div>
         </div>
+
+        <!-- Dynamic script tab pages will be injected here -->
+        <div id="dynamic-pages"></div>
     </div>
 </div>
+
 <div class="modal-overlay" id="new-script-modal">
     <div class="modal">
-        <h3>&#128196; New Script</h3>
-        <input type="text" id="new-script-name" placeholder="example.py" autocomplete="off" onkeydown="if(event.key==='Enter')createNewScript()">
+        <h3>&#128196; Новый скрипт</h3>
+        <input type="text" id="new-script-name" placeholder="my_script" autocomplete="off" onkeydown="if(event.key==='Enter')createNewScript()">
         <div class="modal-actions">
-            <button class="btn" onclick="closeModal()">Cancel</button>
-            <button class="btn btn-primary" onclick="createNewScript()">&#128190; Create</button>
+            <button class="btn" onclick="closeModal()">Отмена</button>
+            <button class="btn btn-primary" onclick="createNewScript()">&#128190; Создать</button>
         </div>
     </div>
 </div>
 <div class="toast" id="toast"></div>
+
 <script>
-let currentEditorFile=null;
+let currentEditorScriptId=null;
+let currentEditorFile='main.py';
 let logsPolling=null;
 let autostartCache=[];
+
 async function api(method,path,body){
     const opts={method,headers:{'Content-Type':'application/json'}};
     if(body)opts.body=JSON.stringify(body);
     const res=await fetch('/api'+path,opts);
     return await res.json();
 }
-function initApp(){updateStatus();loadLogs();loadScripts();logsPolling=setInterval(loadLogs,3000);setInterval(updateStatus,10000);}
+
+function initApp(){
+    updateStatus();loadLogs();loadScripts();loadTabs();
+    logsPolling=setInterval(loadLogs,3000);
+    setInterval(()=>{updateStatus();loadTabs();},10000);
+}
+
 function showPage(name){
     document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
     document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
-    document.getElementById('page-'+name).classList.add('active');
-    document.querySelector(`.nav-item[onclick="showPage('${name}')"]`).classList.add('active');
-    if(name==='scripts')loadScripts();if(name==='debug')loadBackups();if(name==='console')loadLogs();
+    const page=document.getElementById('page-'+name);
+    if(page) page.classList.add('active');
+    const nav=document.querySelector(`.nav-item[data-page="${name}"]`);
+    if(nav) nav.classList.add('active');
+    if(name==='scripts')loadScripts();
+    if(name==='debug')loadBackups();
+    if(name==='console')loadLogs();
+    // refresh tab content if it's a dynamic tab
+    if(name.startsWith('tab-')){
+        refreshTabContent(name.replace('tab-',''));
+    }
 }
+
 async function updateStatus(){
     const data=await api('GET','/status');if(!data)return;
     document.getElementById('status-dot').className='status-dot'+(data.bot_running?'':' offline');
     document.getElementById('status-text').textContent=data.bot_running?'Running':'Offline';
     document.getElementById('scripts-count').textContent=data.total_scripts;
     document.getElementById('console-stats').innerHTML=`
-        <div class="stat-card"><div class="stat-value">${data.loaded_scripts}</div><div class="stat-label">Loaded</div></div>
-        <div class="stat-card"><div class="stat-value">${data.total_scripts}</div><div class="stat-label">Total</div></div>
-        <div class="stat-card"><div class="stat-value">${data.log_count}</div><div class="stat-label">Log entries</div></div>`;
+        <div class="stat-card"><div class="stat-value">${data.loaded_scripts}</div><div class="stat-label">Загружено</div></div>
+        <div class="stat-card"><div class="stat-value">${data.total_scripts}</div><div class="stat-label">Всего</div></div>
+        <div class="stat-card"><div class="stat-value">${data.log_count}</div><div class="stat-label">Логов</div></div>`;
 }
+
 let lastLogCount=0;
 async function loadLogs(){
     const data=await api('GET','/logs');if(!data)return;
     const logs=data.logs;const output=document.getElementById('console-output');
-    if(logs.length===0){output.innerHTML='<div class="empty-state"><div class="icon">&#128220;</div><p>Waiting for logs...</p></div>';document.getElementById('log-count-label').textContent='0 entries';return;}
+    if(logs.length===0){output.innerHTML='<div class="empty-state"><div class="icon">&#128220;</div><p>Ожидание логов...</p></div>';document.getElementById('log-count-label').textContent='0 записей';return;}
     if(logs.length!==lastLogCount){let html='';logs.forEach(line=>{const level=line.match(/\[(INFO|ERROR|WARNING|DEBUG)\]/)?.[1]||'INFO';html+=`<div class="log-line ${level}">${escapeHtml(line)}</div>`;});output.innerHTML=html;output.scrollTop=output.scrollHeight;lastLogCount=logs.length;}
-    document.getElementById('log-count-label').textContent=logs.length+' entries';
+    document.getElementById('log-count-label').textContent=logs.length+' записей';
 }
-async function clearLogs(){await api('POST','/logs/clear');lastLogCount=0;document.getElementById('console-output').innerHTML='<div class="empty-state"><div class="icon">&#128220;</div><p>Logs cleared</p></div>';document.getElementById('log-count-label').textContent='0 entries';}
+
+async function clearLogs(){await api('POST','/logs/clear');lastLogCount=0;document.getElementById('console-output').innerHTML='<div class="empty-state"><div class="icon">&#128220;</div><p>Логи очищены</p></div>';document.getElementById('log-count-label').textContent='0 записей';}
+
 async function execCmd(){
     const input=document.getElementById('console-input');const code=input.value.trim();if(!code)return;input.value='';
     const data=await api('POST','/console/exec',{code});const output=document.getElementById('console-output');
@@ -242,6 +321,8 @@ async function execCmd(){
     else{output.innerHTML+=`<div class="log-line ERROR">&#10005; ${escapeHtml(code)}: ${escapeHtml(data.error)}</div>`;}
     output.scrollTop=output.scrollHeight;
 }
+
+// ── Scripts ─────────────────────────────────────────────────
 async function loadScripts(){
     const [scriptsData, autostartData] = await Promise.all([api('GET','/scripts'), api('GET','/autostart')]);
     if(!scriptsData) return;
@@ -250,83 +331,287 @@ async function loadScripts(){
     if(scriptsData.scripts.length===0){tbody.innerHTML='';empty.style.display='block';return;}
     empty.style.display='none';let html='';
     scriptsData.scripts.forEach(s=>{
-        const fn=s.filename||'';if(!fn)return;
-        const statusClass=s.loaded?'loaded':'unloaded';const statusText=s.loaded?'Loaded':'Not loaded';
-        const isAuto=autostartCache.includes(fn);
-        html+=`<tr>
-            <td class="script-name">${escapeHtml(s.name||fn)}</td>
+        const sid=s.id||'';if(!sid)return;
+        const statusClass=s.loaded?'loaded':'unloaded';const statusText=s.loaded?'Загружен':'Не загружен';
+        const isAuto=autostartCache.includes(sid);
+        const isFolder=s.is_folder;
+        const hasAddons=s.addons&&s.addons.length>0;
+
+        html+=`<tr data-script-id="${escapeHtml(sid)}">
+            <td class="script-name">
+                ${isFolder?'&#128193;':'&#128196;'} ${escapeHtml(s.name||sid)}
+                ${s.command?`<span style="color:var(--text-muted);font-size:11px;margin-left:6px">${escapeHtml(s.command)}</span>`:''}
+            </td>
             <td><span class="script-status ${statusClass}"><span class="dot"></span>${statusText}</span></td>
-            <td><label class="toggle" title="Auto-start"><input type="checkbox" ${isAuto?'checked':''} onchange="toggleAutostart('${escapeHtml(fn)}',this.checked)"><span class="slider"></span></label></td>
+            <td><label class="toggle" title="Автозапуск"><input type="checkbox" ${isAuto?'checked':''} onchange="toggleAutostart('${escapeHtml(sid)}',this.checked)"><span class="slider"></span></label></td>
             <td style="color:var(--text-secondary);font-size:12px">${escapeHtml(s.size||'N/A')}</td>
             <td style="color:var(--text-secondary);font-size:12px">${escapeHtml(s.modified||'N/A')}</td>
             <td><div class="script-actions">
-                ${s.loaded?`<button class="btn btn-sm" onclick="unloadScript('${escapeHtml(fn)}')">&#9724; Stop</button>`:`<button class="btn btn-sm btn-success" onclick="loadScript('${escapeHtml(fn)}')">&#9654; Start</button>`}
-                <button class="btn btn-sm" onclick="editScript('${escapeHtml(fn)}')">&#9998;</button>
-                <button class="btn btn-sm btn-danger" onclick="deleteScript('${escapeHtml(fn)}')">&#128465;</button>
+                ${s.loaded?`<button class="btn btn-sm" onclick="unloadScript('${escapeHtml(sid)}')">&#9724; Стоп</button>`:`<button class="btn btn-sm btn-success" onclick="loadScript('${escapeHtml(sid)}')">&#9654; Старт</button>`}
+                <button class="btn btn-sm" onclick="editScript('${escapeHtml(sid)}','main.py')">&#9998;</button>
+                ${s.loaded?`<button class="btn btn-sm btn-blue" onclick="reloadScript('${escapeHtml(sid)}')">&#128260;</button>`:''}
+                <button class="btn btn-sm btn-danger" onclick="deleteScript('${escapeHtml(sid)}')">&#128465;</button>
             </div></td></tr>`;
+
+        // Addons rows
+        if(hasAddons){
+            s.addons.forEach(addon=>{
+                const aFile=addon.file||'';
+                const aEnabled=addon.enabled!==false;
+                html+=`<tr class="addon-tr" data-parent="${escapeHtml(sid)}">
+                    <td colspan="6" style="padding:0;border:none;background:var(--bg-primary)">
+                        <div class="addon-row">
+                            <span class="addon-indicator">&#128268;</span>
+                            <span class="addon-name">${escapeHtml(addon.name||aFile)}</span>
+                            ${addon.command?`<span class="addon-cmd">${escapeHtml(addon.command)}</span>`:''}
+                            <span style="font-size:11px;color:var(--text-muted);flex:1">${escapeHtml(addon.description||'')}</span>
+                            <label class="toggle" style="transform:scale(0.85)" title="${aEnabled?'Выключить':'Включить'}">
+                                <input type="checkbox" ${aEnabled?'checked':''} onchange="toggleAddon('${escapeHtml(sid)}','${escapeHtml(aFile)}',this.checked)" ${!s.loaded?'disabled':''}>
+                                <span class="slider"></span>
+                            </label>
+                            <button class="btn btn-xs" onclick="editScript('${escapeHtml(sid)}','${escapeHtml(aFile)}')" title="Редактировать">&#9998;</button>
+                        </div>
+                    </td></tr>`;
+            });
+        }
     });
     tbody.innerHTML=html;
 }
-async function toggleAutostart(filename,enabled){
-    const data=await api('POST',`/autostart/${encodeURIComponent(filename)}`,{enabled});
+
+async function toggleAutostart(scriptId,enabled){
+    const data=await api('POST',`/autostart/${encodeURIComponent(scriptId)}`,{enabled});
     if(data.success){
-        if(enabled && !autostartCache.includes(filename)) autostartCache.push(filename);
-        else if(!enabled) autostartCache=autostartCache.filter(f=>f!==filename);
-        toast(enabled?`Auto-start ON: ${filename}`:`Auto-start OFF: ${filename}`,true);
+        if(enabled && !autostartCache.includes(scriptId)) autostartCache.push(scriptId);
+        else if(!enabled) autostartCache=autostartCache.filter(f=>f!==scriptId);
+        toast(enabled?`Автозапуск ВКЛ: ${scriptId}`:`Автозапуск ВЫКЛ: ${scriptId}`,true);
     } else { toast(data.error||'Error',false); loadScripts(); }
 }
-async function loadScript(filename){
-    if(!filename){toast('Empty filename',false);return;}
-    const data=await api('POST',`/scripts/${encodeURIComponent(filename)}/load`);
-    toast(data.success?`OK ${filename} loaded`:`${data.error}`,data.success);loadScripts();updateStatus();
+
+async function loadScript(scriptId){
+    if(!scriptId){toast('Пустой ID',false);return;}
+    const data=await api('POST',`/scripts/${encodeURIComponent(scriptId)}/load`);
+    toast(data.success?`OK ${scriptId} загружен`:`${data.error}`,data.success);loadScripts();updateStatus();loadTabs();
 }
-async function unloadScript(filename){
-    if(!filename){toast('Empty filename',false);return;}
-    const data=await api('POST',`/scripts/${encodeURIComponent(filename)}/unload`);
-    toast(data.success?`OK ${filename} unloaded`:`${data.error}`,data.success);loadScripts();updateStatus();
+async function unloadScript(scriptId){
+    if(!scriptId){toast('Пустой ID',false);return;}
+    const data=await api('POST',`/scripts/${encodeURIComponent(scriptId)}/unload`);
+    toast(data.success?`OK ${scriptId} выгружен`:`${data.error}`,data.success);loadScripts();updateStatus();loadTabs();
 }
-async function editScript(filename){
-    if(!filename){toast('Empty filename',false);return;}
-    const data=await api('GET',`/scripts/${encodeURIComponent(filename)}`);if(!data||!data.success)return;
-    currentEditorFile=filename;document.getElementById('editor-filename').textContent=filename;
+async function reloadScript(scriptId){
+    if(!scriptId){toast('Пустой ID',false);return;}
+    const data=await api('POST',`/scripts/${encodeURIComponent(scriptId)}/reload`);
+    toast(data.success?`OK ${scriptId} перезагружен`:`${data.error}`,data.success);loadScripts();updateStatus();loadTabs();
+}
+
+async function editScript(scriptId,subpath){
+    if(!scriptId){toast('Пустой ID',false);return;}
+    const data=await api('GET',`/scripts/${encodeURIComponent(scriptId)}/source?file=${encodeURIComponent(subpath)}`);
+    if(!data||!data.success)return;
+    currentEditorScriptId=scriptId;currentEditorFile=subpath;
+    document.getElementById('editor-filename').textContent=`${scriptId}/${subpath}`;
     document.getElementById('code-editor').value=data.source;
     document.getElementById('editor-container').classList.add('active');
     document.getElementById('editor-container').scrollIntoView({behavior:'smooth'});
 }
+
 async function saveScript(){
-    if(!currentEditorFile)return;
+    if(!currentEditorScriptId)return;
     const source=document.getElementById('code-editor').value;
-    const data=await api('POST','/scripts',{filename:currentEditorFile,source});
-    toast(data.success?`OK ${currentEditorFile} saved`:`${data.error}`,data.success);loadScripts();
+    const data=await api('POST',`/scripts/${encodeURIComponent(currentEditorScriptId)}/source`,{file:currentEditorFile,source});
+    toast(data.success?`OK сохранено: ${currentEditorScriptId}/${currentEditorFile}`:`${data.error}`,data.success);loadScripts();
 }
-function closeEditor(){document.getElementById('editor-container').classList.remove('active');currentEditorFile=null;}
-async function deleteScript(filename){
-    if(!filename){toast('Empty filename',false);return;}
-    if(!confirm(`Delete ${filename}?`))return;
-    const data=await api('DELETE',`/scripts/${encodeURIComponent(filename)}`);
-    toast(data.success?`OK ${filename} deleted`:`${data.error}`,data.success);loadScripts();updateStatus();
+function closeEditor(){document.getElementById('editor-container').classList.remove('active');currentEditorScriptId=null;}
+
+async function deleteScript(scriptId){
+    if(!scriptId){toast('Пустой ID',false);return;}
+    if(!confirm(`Удалить скрипт ${scriptId}?`))return;
+    const data=await api('DELETE',`/scripts/${encodeURIComponent(scriptId)}`);
+    toast(data.success?`OK ${scriptId} удалён`:`${data.error}`,data.success);loadScripts();updateStatus();loadTabs();
 }
+
+async function toggleAddon(scriptId,addonFile,enabled){
+    toast(`${enabled?'Включение':'Выключение'} ${addonFile}...`,true);
+    const data=await api('POST',`/scripts/${encodeURIComponent(scriptId)}/addons/${encodeURIComponent(addonFile)}`,{enabled});
+    if(data.success) toast(`${addonFile} ${enabled?'включён':'выключён'} (перезагружен)`,true);
+    else toast(data.error||'Ошибка',false);
+    loadScripts();
+}
+
 function openNewScriptModal(){document.getElementById('new-script-modal').classList.add('active');document.getElementById('new-script-name').value='';setTimeout(()=>document.getElementById('new-script-name').focus(),100);}
 function closeModal(){document.getElementById('new-script-modal').classList.remove('active');}
 async function createNewScript(){
     let name=document.getElementById('new-script-name').value.trim();if(!name)return;
-    if(!name.endsWith('.py'))name+='.py';
-    const template=`"""\nName: ${name.replace('.py','')}\nVersion: 1.0\nAuthor: UserBot\nDescription: Script description\n"""\n\n\ndef register(client):\n    pass\n\n\ndef on_load():\n    print(f"[${__name__}] Loaded")\n\n\ndef on_unload():\n    print(f"[${__name__}] Unloaded")\n`;
-    const data=await api('POST','/scripts',{filename:name,source:template});
-    if(data.success){closeModal();toast(`OK ${name} created`,true);loadScripts();editScript(name);}
-    else{toast(`${data.error}`,false);}
+    // Create a folder script
+    const meta={name:name,version:"1.0",author:"User",description:"Custom script",command:"",addons:[],tabs:[]};
+    const mainPy=`"""\n${name} - main module\n"""\n\ndef register(client):\n    pass\n\n\ndef on_load():\n    print("[${name}] Loaded")\n\n\ndef on_unload():\n    print("[${name}] Unloaded")\n`;
+    const r1=await api('POST',`/scripts/${encodeURIComponent(name)}/source`,{file:"meta.json",source:JSON.stringify(meta,null,2)});
+    const r2=await api('POST',`/scripts/${encodeURIComponent(name)}/source`,{file:"main.py",source:mainPy});
+    if(r2.success){closeModal();toast(`OK скрипт ${name} создан`,true);loadScripts();editScript(name,'main.py');}
+    else{toast(r2.error||'Ошибка',false);}
 }
-async function createBackup(){const data=await api('POST','/debug/backup');toast(data.success?`OK Backup ${data.backup_name} (${data.files_count} files)`:`${data.error}`,data.success);loadBackups();}
-async function restartScripts(){const data=await api('POST','/debug/restart');toast(data.success?`OK ${data.reloaded}/${data.total} reloaded`:`${data.error}`,data.success);updateStatus();loadScripts();}
-async function unloadAll(){if(!confirm('Unload all scripts?'))return;const data=await api('POST','/debug/unload_all');toast(data.success?`OK ${data.unloaded}/${data.total} unloaded`:`${data.error}`,data.success);updateStatus();loadScripts();}
+
+// ── Debug ───────────────────────────────────────────────────
+async function createBackup(){const data=await api('POST','/debug/backup');toast(data.success?`OK Бэкап ${data.backup_name} (${data.files_count} файлов)`:`${data.error}`,data.success);loadBackups();}
+async function restartScripts(){const data=await api('POST','/debug/restart');toast(data.success?`OK ${data.reloaded}/${data.total} перезагружено`:`${data.error}`,data.success);updateStatus();loadScripts();loadTabs();}
+async function unloadAll(){if(!confirm('Выгрузить все скрипты?'))return;const data=await api('POST','/debug/unload_all');toast(data.success?`OK ${data.unloaded}/${data.total} выгружено`:`${data.error}`,data.success);updateStatus();loadScripts();loadTabs();}
 async function loadBackups(){
     const data=await api('GET','/debug/backups');if(!data)return;
     const container=document.getElementById('backups-list');const empty=document.getElementById('backups-empty');
     if(data.backups.length===0){container.innerHTML='';empty.style.display='block';return;}
     empty.style.display='none';let html='';
-    data.backups.forEach(b=>{html+=`<div class="backup-item"><div><div class="backup-name">${escapeHtml(b.name)}</div><div class="backup-meta">${b.date} - ${b.files} files</div></div></div>`;});
+    data.backups.forEach(b=>{html+=`<div class="backup-item"><div><div class="backup-name">${escapeHtml(b.name)}</div><div class="backup-meta">${b.date} - ${b.files} файлов</div></div></div>`;});
     container.innerHTML=html;
 }
+
+// ── Dynamic Tabs ────────────────────────────────────────────
+let tabDataCache={};
+
+async function loadTabs(){
+    const data=await api('GET','/tabs');
+    if(!data||!data.success)return;
+    const tabs=data.tabs;
+    const section=document.getElementById('nav-tabs-section');
+    const container=document.getElementById('nav-tabs-container');
+
+    if(tabs.length===0){
+        section.style.display='none';
+        container.innerHTML='';
+        // Remove any orphan dynamic pages
+        return;
+    }
+
+    section.style.display='block';
+    let html='';
+    tabs.forEach(tab=>{
+        html+=`<div class="nav-item" data-page="tab-${escapeHtml(tab.id)}" onclick="showPage('tab-${escapeHtml(tab.id)}')">
+            <span class="icon">${escapeHtml(tab.icon||'&#128196;')}</span>
+            <span>${escapeHtml(tab.name)}</span>
+        </div>`;
+    });
+    container.innerHTML=html;
+
+    // Create page containers for tabs that don't have one yet
+    tabs.forEach(tab=>{
+        const pageId=`page-tab-${tab.id}`;
+        if(!document.getElementById(pageId)){
+            const pageDiv=document.createElement('div');
+            pageDiv.className='page';
+            pageDiv.id=pageId;
+            pageDiv.innerHTML=`<div class="empty-state"><div class="icon">&#8987;</div><p>Загрузка...</p></div>`;
+            document.getElementById('dynamic-pages').appendChild(pageDiv);
+        }
+    });
+}
+
+async function refreshTabContent(tabId){
+    if(tabId==='deleted_logger'){
+        await loadLoggerData();
+    }
+}
+
+// ── Deleted Logger Tab ──────────────────────────────────────
+let selectedLoggerChat=null;
+
+async function loadLoggerData(){
+    const pageId='page-tab-deleted_logger';
+    const page=document.getElementById(pageId);
+    if(!page)return;
+
+    // Fetch chat list
+    const data=await api('GET','/tabs/deleted_logger?action=list_chats');
+    if(!data||!data.success)return;
+
+    const chats=data.chats||[];
+    const enabled=data.enabled||false;
+
+    if(selectedLoggerChat===null && chats.length>0){
+        selectedLoggerChat=chats[0].id;
+    }
+
+    let chatsHtml='';
+    chats.forEach(chat=>{
+        const active=chat.id===selectedLoggerChat?'active':'';
+        chatsHtml+=`<div class="logger-chat-item ${active}" onclick="selectLoggerChat('${escapeHtml(chat.id)}')">
+            <div class="logger-chat-title">${chat.type==='private'?'&#128100;':'&#128172;'} ${escapeHtml(chat.title)}</div>
+            <div class="logger-chat-meta">${chat.count} удал. &middot; ${escapeHtml(chat.last_deleted?chat.last_deleted.substring(0,16):'')}</div>
+        </div>`;
+    });
+
+    page.innerHTML=`
+        <div class="page-header"><div><h2>&#128465; Удалённые сообщения</h2><div class="subtitle">Логгер удалённых сообщений из чатов</div></div></div>
+        <div class="logger-layout">
+            <div class="logger-chats">
+                <div class="logger-status">
+                    <div class="logger-status-dot ${enabled?'on':'off'}"></div>
+                    <span>Логгер: <b>${enabled?'Включён':'Выключен'}</b></span>
+                    <span style="margin-left:auto;font-size:11px;color:var(--text-muted)">${chats.length} чатов</span>
+                </div>
+                <div class="logger-chats-header">&#128172; Чаты</div>
+                <div class="logger-chats-list">
+                    ${chatsHtml||'<div class="empty-state" style="padding:24px"><div class="icon">&#128465;</div><p>Нет данных</p><p style="font-size:11px;margin-top:8px">Включите логгер: <code>.dl on</code> в Telegram</p></div>'}
+                </div>
+            </div>
+            <div class="logger-messages">
+                <div class="logger-messages-header">
+                    <h3 id="logger-chat-title">Выберите чат</h3>
+                    <button class="btn btn-sm" onclick="loadLoggerData()">&#128260;</button>
+                </div>
+                <div class="logger-messages-list" id="logger-messages-list">
+                    <div class="logger-empty">&#128065; Выберите чат слева</div>
+                </div>
+            </div>
+        </div>`;
+
+    // Load messages for selected chat
+    if(selectedLoggerChat){
+        await loadLoggerMessages(selectedLoggerChat);
+    }
+}
+
+async function selectLoggerChat(chatId){
+    selectedLoggerChat=chatId;
+    // Update active state
+    document.querySelectorAll('.logger-chat-item').forEach(el=>el.classList.remove('active'));
+    event.currentTarget.classList.add('active');
+    await loadLoggerMessages(chatId);
+}
+
+async function loadLoggerMessages(chatId){
+    const data=await api('GET',`/tabs/deleted_logger?action=chat_messages&chat_id=${encodeURIComponent(chatId)}`);
+    if(!data||!data.success)return;
+
+    const chat=data.chat;
+    const messages=data.messages||[];
+    const titleEl=document.getElementById('logger-chat-title');
+    const listEl=document.getElementById('logger-messages-list');
+    if(!listEl)return;
+
+    if(titleEl) titleEl.textContent=chat?`${chat.title} (${messages.length})`:'Чат не найден';
+
+    if(messages.length===0){
+        listEl.innerHTML='<div class="logger-empty">Нет удалённых сообщений</div>';
+        return;
+    }
+
+    let html='';
+    messages.forEach(msg=>{
+        const text=escapeHtml(msg.text||'(нет текста)');
+        const mediaHtml=msg.has_media?`<div class="logger-msg-media">&#128247; ${escapeHtml(msg.media_type||'медиа')}</div>`:'';
+        const senderHtml=msg.sender_name?`<span class="logger-msg-sender">${escapeHtml(msg.sender_name)}</span>`:'<span class="logger-msg-sender" style="color:var(--text-muted)">Неизвестный</span>';
+        html+=`<div class="logger-msg">
+            <div class="logger-msg-header">
+                ${senderHtml}
+                <span class="logger-msg-date">${escapeHtml(msg.date?msg.date.substring(0,16):'')}</span>
+            </div>
+            <div class="logger-msg-text">${text}</div>
+            ${mediaHtml}
+            <div class="logger-msg-deleted">&#128465; Удалено: ${escapeHtml(msg.deleted_at?msg.deleted_at.substring(0,16):'?')}</div>
+        </div>`;
+    });
+    listEl.innerHTML=html;
+}
+
+// ── Utility ─────────────────────────────────────────────────
 function toast(msg,success){const el=document.getElementById('toast');el.textContent=msg;el.className='toast '+(success?'success':'error');el.classList.add('show');setTimeout(()=>el.classList.remove('show'),3000);}
 function escapeHtml(str){if(!str)return'';const div=document.createElement('div');div.textContent=str;return div.innerHTML;}
 document.addEventListener('keydown',(e)=>{if(e.target.id==='code-editor'&&e.key==='Tab'){e.preventDefault();const ta=e.target;const start=ta.selectionStart;const end=ta.selectionEnd;ta.value=ta.value.substring(0,start)+'    '+ta.value.substring(end);ta.selectionStart=ta.selectionEnd=start+4;}});

@@ -1,0 +1,9 @@
+{
+  "name": "Ping",
+  "version": "1.0",
+  "author": "Zaya",
+  "description": "Простой пинг юзербота",
+  "command": ".ping",
+  "addons": [],
+  "tabs": []
+}

@@ -43,6 +43,8 @@ def create_web_app():
             "uptime_logs": len(Config.log_buffer),
         })
 
+    # ── Logs ────────────────────────────────────────────────────────────
+
     @app.route("/api/logs", methods=["GET"])
     def get_logs():
         return jsonify({"success": True, "logs": Config.get_logs()})
@@ -52,121 +54,140 @@ def create_web_app():
         Config.clear_logs()
         return jsonify({"success": True})
 
+    # ── Scripts ─────────────────────────────────────────────────────────
+
     @app.route("/api/scripts", methods=["GET"])
     def list_scripts():
         loader = ScriptLoader()
         scripts = []
-        for filename in loader.get_available_scripts():
-            info = loader.get_script_info(filename) or {}
-            info["filename"] = filename
-            info["loaded"] = filename in Config.loaded_modules
-            scripts.append(info)
+        for sid in loader.get_available_scripts():
+            info = loader.get_script_info(sid)
+            if info:
+                # Add addon enabled states
+                if info.get("addons"):
+                    addon_states = loader.get_addon_states(sid)
+                    for addon in info["addons"]:
+                        addon_file = addon.get("file", "")
+                        addon["enabled"] = addon_states.get(addon_file, addon.get("enabled", True))
+                scripts.append(info)
         return jsonify({"success": True, "scripts": scripts})
 
-    @app.route("/api/scripts/<filename>", methods=["GET"])
-    def get_script(filename):
-        if not filename.endswith(".py"):
-            filename += ".py"
+    @app.route("/api/scripts/<script_id>/source", methods=["GET"])
+    def get_script_source(script_id):
+        subpath = request.args.get("file", "main.py")
         loader = ScriptLoader()
-        source = loader.get_script_source(filename)
+        source = loader.get_script_source(script_id, subpath)
         if source is None:
             return jsonify({"success": False, "error": "File not found"}), 404
         return jsonify({
             "success": True,
-            "filename": filename,
+            "script_id": script_id,
+            "subpath": subpath,
             "source": source,
-            "loaded": filename in Config.loaded_modules,
-            "is_custom": loader.is_custom_script(filename),
         })
 
-    @app.route("/api/scripts", methods=["POST"])
-    def save_script():
+    @app.route("/api/scripts/<script_id>/source", methods=["POST"])
+    def save_script_source(script_id):
         data = request.get_json(silent=True) or {}
-        filename = data.get("filename", "")
+        subpath = data.get("file", "main.py")
         source = data.get("source", "")
-        if not filename:
-            return jsonify({"success": False, "error": "Filename not specified"}), 400
         loader = ScriptLoader()
-        result = loader.save_script(filename, source)
+        result = loader.save_script(script_id, source, subpath)
         if result["success"]:
-            Config.add_log(f"Script {filename} saved via web panel")
+            Config.add_log(f"Script {script_id}/{subpath} saved via web panel")
         return jsonify(result)
 
-    @app.route("/api/scripts/<path:filename>/load", methods=["POST"])
-    def load_script(filename):
-        if not filename:
-            return jsonify({"success": False, "error": "Filename is empty"}), 400
-        if not filename.endswith(".py"):
-            filename += ".py"
+    @app.route("/api/scripts/<script_id>/load", methods=["POST"])
+    def load_script(script_id):
         loader = ScriptLoader()
         client = _get_bot_client()
-        result = loader.load_script(filename, client)
+        result = loader.load_script(script_id, client)
         if result["success"]:
-            Config.add_log(f"Script {filename} loaded via web panel")
+            Config.add_log(f"Script {script_id} loaded via web panel")
         return jsonify(result)
 
-    @app.route("/api/scripts/<path:filename>/unload", methods=["POST"])
-    def unload_script(filename):
-        if not filename:
-            return jsonify({"success": False, "error": "Filename is empty"}), 400
-        if not filename.endswith(".py"):
-            filename += ".py"
+    @app.route("/api/scripts/<script_id>/unload", methods=["POST"])
+    def unload_script(script_id):
         loader = ScriptLoader()
-        result = loader.unload_script(filename)
+        result = loader.unload_script(script_id)
         if result["success"]:
-            Config.add_log(f"Script {filename} unloaded via web panel")
+            Config.add_log(f"Script {script_id} unloaded via web panel")
         return jsonify(result)
 
-    @app.route("/api/scripts/<path:filename>/reload", methods=["POST"])
-    def reload_script(filename):
-        if not filename:
-            return jsonify({"success": False, "error": "Filename is empty"}), 400
-        if not filename.endswith(".py"):
-            filename += ".py"
+    @app.route("/api/scripts/<script_id>/reload", methods=["POST"])
+    def reload_script(script_id):
         loader = ScriptLoader()
         client = _get_bot_client()
-        loader.unload_script(filename)
-        result = loader.load_script(filename, client)
+        loader.unload_script(script_id)
+        result = loader.load_script(script_id, client)
         if result["success"]:
-            Config.add_log(f"Script {filename} reloaded via web panel")
+            Config.add_log(f"Script {script_id} reloaded via web panel")
         return jsonify(result)
 
-    @app.route("/api/scripts/<path:filename>", methods=["DELETE"])
-    def delete_script(filename):
-        if not filename:
-            return jsonify({"success": False, "error": "Filename is empty"}), 400
-        if not filename.endswith(".py"):
-            filename += ".py"
+    @app.route("/api/scripts/<script_id>", methods=["DELETE"])
+    def delete_script(script_id):
         loader = ScriptLoader()
-        result = loader.delete_script(filename)
+        result = loader.delete_script(script_id)
         if result["success"]:
-            Config.add_log(f"Script {filename} deleted via web panel")
-            # Also remove from auto-start list
-            Config.set_auto_start(filename, False)
+            Config.add_log(f"Script {script_id} deleted via web panel")
+            Config.set_auto_start(script_id, False)
         return jsonify(result)
+
+    # ── Auto-start ──────────────────────────────────────────────────────
 
     @app.route("/api/autostart", methods=["GET"])
     def get_autostart():
-        """Return the list of scripts configured for auto-start."""
         return jsonify({"success": True, "scripts": Config.get_auto_start()})
 
-    @app.route("/api/autostart/<path:filename>", methods=["POST"])
-    def toggle_autostart(filename):
-        """Toggle auto-start for a specific script. Body: {\"enabled\": true/false}"""
-        if not filename:
-            return jsonify({"success": False, "error": "Filename is empty"}), 400
-        if not filename.endswith(".py"):
-            filename += ".py"
+    @app.route("/api/autostart/<script_id>", methods=["POST"])
+    def toggle_autostart(script_id):
         data = request.get_json(silent=True) or {}
         enabled = bool(data.get("enabled", True))
         loader = ScriptLoader()
-        # Verify the script exists
-        if not loader.get_script_source(filename):
-            return jsonify({"success": False, "error": f"Script {filename} not found"}), 404
-        ok = Config.set_auto_start(filename, enabled)
+        # Verify script exists
+        if not loader.get_script_info(script_id):
+            return jsonify({"success": False, "error": f"Script {script_id} not found"}), 404
+        ok = Config.set_auto_start(script_id, enabled)
         if ok:
-            Config.add_log(f"Auto-start {'enabled' if enabled else 'disabled'} for {filename}")
+            Config.add_log(f"Auto-start {'enabled' if enabled else 'disabled'} for {script_id}")
         return jsonify({"success": ok})
+
+    # ── Addons ──────────────────────────────────────────────────────────
+
+    @app.route("/api/scripts/<script_id>/addons/<addon_file>", methods=["POST"])
+    def toggle_addon(script_id, addon_file):
+        """Toggle an addon enabled/disabled."""
+        data = request.get_json(silent=True) or {}
+        enabled = bool(data.get("enabled", True))
+        loader = ScriptLoader()
+        ok = loader.set_addon_state(script_id, addon_file, enabled)
+        if ok:
+            Config.add_log(f"Addon {script_id}/{addon_file} {'enabled' if enabled else 'disabled'}")
+            # Reload the script to apply addon changes
+            client = _get_bot_client()
+            loader.unload_script(script_id)
+            result = loader.load_script(script_id, client)
+            return jsonify({"success": result["success"], "reloaded": True})
+        return jsonify({"success": False, "error": "Failed to save addon state"})
+
+    # ── Tabs (dynamic from scripts) ────────────────────────────────────
+
+    @app.route("/api/tabs", methods=["GET"])
+    def get_tabs():
+        """Get all available tabs from loaded scripts."""
+        loader = ScriptLoader()
+        tabs = loader.get_available_tabs()
+        return jsonify({"success": True, "tabs": tabs})
+
+    @app.route("/api/tabs/<tab_id>", methods=["GET"])
+    def get_tab_data(tab_id):
+        """Get data for a specific tab."""
+        loader = ScriptLoader()
+        params = dict(request.args)
+        result = loader.get_tab_data(tab_id, **params)
+        return jsonify(result)
+
+    # ── Debug ───────────────────────────────────────────────────────────
 
     @app.route("/api/debug/backup", methods=["POST"])
     def create_backup():
@@ -207,6 +228,8 @@ def create_web_app():
         Config.add_log(f"All scripts unloaded: {count}/{len(loaded)}")
         return jsonify({"success": True, "unloaded": count, "total": len(loaded)})
 
+    # ── Console ─────────────────────────────────────────────────────────
+
     @app.route("/api/console/exec", methods=["POST"])
     def exec_command():
         data = request.get_json(silent=True) or {}
@@ -217,6 +240,7 @@ def create_web_app():
         allowed_commands = {
             "status": lambda: {
                 "loaded": list(Config.loaded_modules.keys()),
+                "addons": {k: list(v.keys()) for k, v in Config.loaded_addons.items()},
                 "scripts_count": len(ScriptLoader().get_available_scripts()),
                 "bot_running": _get_bot_client() is not None,
             },

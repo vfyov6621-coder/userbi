@@ -76,7 +76,6 @@ async def mm_callback(client: Client, callback: CallbackQuery):
     data = callback.data
     from_user_id = callback.from_user.id
 
-    # ── Photo ──────────────────────────────────────────────────────
     if data == "mm_photo":
         if os.path.exists(PHOTO_FILE):
             try:
@@ -90,7 +89,6 @@ async def mm_callback(client: Client, callback: CallbackQuery):
                 show_alert=True,
             )
 
-    # ── Ping ───────────────────────────────────────────────────────
     elif data == "mm_ping":
         start = time.time()
         msg = await callback.message.edit_text("🏓 Пинг...")
@@ -99,7 +97,6 @@ async def mm_callback(client: Client, callback: CallbackQuery):
         await msg.edit_text(f"🏓 <b>Пинг: {ms}ms</b>", parse_mode=ParseMode.HTML)
         await callback.answer(show_alert=False)
 
-    # ── Info ───────────────────────────────────────────────────────
     elif data == "mm_info":
         info = _load_info()
 
@@ -118,7 +115,6 @@ async def mm_callback(client: Client, callback: CallbackQuery):
         await callback.message.edit_text(text, parse_mode=ParseMode.HTML)
         await callback.answer(show_alert=False)
 
-    # ── Owner (owner only) ─────────────────────────────────────────
     elif data == "mm_owner":
         if not _is_owner(from_user_id, client):
             await callback.answer("⛔ Только для владельца", show_alert=True)
@@ -175,11 +171,9 @@ async def mf_command(client: Client, message: Message):
     try:
         os.makedirs(os.path.dirname(PHOTO_FILE), exist_ok=True)
 
-        # Download photo (best quality = last item)
         if reply.photo:
             file = await client.download_media(reply.photo.file_id, file_name=PHOTO_FILE)
         else:
-            # sticker — download as jpg
             file = await client.download_media(reply.sticker.file_id, file_name=PHOTO_FILE)
 
         if file:
@@ -204,13 +198,13 @@ async def lm_command(client: Client, message: Message):
     args = message.text.split(maxsplit=1)
     if len(args) < 2:
         await message.edit_text(
-            "<b>Available .lm commands:</b>\n\n"
-            "  <code>.lm load &lt;file&gt;</code> - load script\n"
-            "  <code>.lm unload &lt;file&gt;</code> - unload script\n"
-            "  <code>.lm list</code> - list scripts\n"
-            "  <code>.lm reload &lt;file&gt;</code> - reload script\n"
-            "  <code>.lm info &lt;file&gt;</code> - script info\n"
-            "  <code>.lm unload_all</code> - unload all scripts",
+            "<b>Управление скриптами:</b>\n\n"
+            "  <code>.lm load &lt;id&gt;</code> — загрузить скрипт\n"
+            "  <code>.lm unload &lt;id&gt;</code> — выгрузить\n"
+            "  <code>.lm reload &lt;id&gt;</code> — перезагрузить\n"
+            "  <code>.lm list</code> — список скриптов\n"
+            "  <code>.lm info &lt;id&gt;</code> — инфо о скрипте\n"
+            "  <code>.lm unload_all</code> — выгрузить все",
             parse_mode=ParseMode.HTML,
         )
         return
@@ -221,21 +215,21 @@ async def lm_command(client: Client, message: Message):
     if action == "list":
         await _cmd_list(client, message)
     elif action.startswith("load "):
-        filename = action[5:].strip()
-        await _cmd_load(client, message, filename)
+        sid = action[5:].strip()
+        await _cmd_load(client, message, sid)
     elif action.startswith("unload "):
-        filename = action[7:].strip()
-        await _cmd_unload(client, message, filename)
+        sid = action[7:].strip()
+        await _cmd_unload(client, message, sid)
     elif action.startswith("reload "):
-        filename = action[7:].strip()
-        await _cmd_reload(client, message, filename)
+        sid = action[7:].strip()
+        await _cmd_reload(client, message, sid)
     elif action.startswith("info "):
-        filename = action[5:].strip()
-        await _cmd_info(client, message, filename)
+        sid = action[5:].strip()
+        await _cmd_info(client, message, sid)
     elif action == "unload_all":
         await _cmd_unload_all(client, message)
     else:
-        await message.edit_text(f"Unknown command: <code>{action}</code>", parse_mode=ParseMode.HTML)
+        await message.edit_text(f"Неизвестная команда: <code>{action}</code>", parse_mode=ParseMode.HTML)
 
 
 async def _cmd_list(client: Client, message: Message):
@@ -243,99 +237,103 @@ async def _cmd_list(client: Client, message: Message):
     available = loader.get_available_scripts()
     loaded = list(Config.loaded_modules.keys())
 
-    text = "<b>Scripts:</b>\n\n"
-    text += "<b>Loaded:</b>\n"
+    text = "<b>Скрипты:</b>\n\n"
+    text += "<b>Загружены:</b>\n"
     if loaded:
-        for name in loaded:
-            info = Config.loaded_modules_info.get(name, {})
-            text += f"  <code>{name}</code>"
-            if info.get("version"):
-                text += f" v{info['version']}"
+        for sid in loaded:
+            info = Config.loaded_modules_info.get(sid, {})
+            name = info.get("name", sid)
+            cmd = info.get("command", "")
+            text += f"  <code>{sid}</code>"
+            if cmd:
+                text += f" ({cmd})"
             text += "\n"
     else:
-        text += "  <i>None</i>\n"
+        text += "  <i>Нет</i>\n"
 
-    text += "\n<b>Available:</b>\n"
+    text += "\n<b>Доступны:</b>\n"
     not_loaded = [s for s in available if s not in loaded]
     if not_loaded:
-        for name in not_loaded:
-            text += f"  <code>{name}</code>\n"
+        for sid in not_loaded:
+            text += f"  <code>{sid}</code>\n"
     else:
-        text += "  <i>All loaded</i>\n"
+        text += "  <i>Все загружены</i>\n"
 
-    text += f"\nTotal files: {len(available)}"
+    text += f"\nВсего: {len(available)}"
     await message.edit_text(text, parse_mode=ParseMode.HTML)
 
 
-async def _cmd_load(client: Client, message: Message, filename: str):
-    if not filename.endswith(".py"):
-        filename += ".py"
-
+async def _cmd_load(client: Client, message: Message, script_id: str):
     loader = ScriptLoader()
-    result = loader.load_script(filename, client)
+    result = loader.load_script(script_id, client)
 
     if result["success"]:
-        await message.edit_text(
-            f"Script <code>{filename}</code> loaded!\n\n"
-            f"Name: {result.get('info', {}).get('name', filename)}\n"
-            f"Version: {result.get('info', {}).get('version', 'N/A')}\n"
-            f"Author: {result.get('info', {}).get('author', 'N/A')}\n"
-            f"Description: {result.get('info', {}).get('description', 'N/A')}",
-            parse_mode=ParseMode.HTML,
-        )
-        Config.add_log(f"Script {filename} loaded")
+        info = result.get("info", {})
+        addons = result.get("addons_loaded", [])
+        text = f"✅ Скрипт <code>{script_id}</code> загружен!\n\n"
+        text += f"📝 Имя: {info.get('name', script_id)}\n"
+        text += f"📋 Версия: {info.get('version', '?')}\n"
+        if addons:
+            text += f"🔌 Аддоны: {', '.join(addons)}\n"
+        await message.edit_text(text, parse_mode=ParseMode.HTML)
+        Config.add_log(f"Script {script_id} loaded")
     else:
-        await message.edit_text(f"Error: <code>{result['error']}</code>", parse_mode=ParseMode.HTML)
-        Config.add_log(f"Error loading {filename}: {result['error']}", "ERROR")
+        await message.edit_text(f"❌ Ошибка: <code>{result['error']}</code>", parse_mode=ParseMode.HTML)
+        Config.add_log(f"Error loading {script_id}: {result['error']}", "ERROR")
 
 
-async def _cmd_unload(client: Client, message: Message, filename: str):
-    if not filename.endswith(".py"):
-        filename += ".py"
-
+async def _cmd_unload(client: Client, message: Message, script_id: str):
     loader = ScriptLoader()
-    result = loader.unload_script(filename)
-
+    result = loader.unload_script(script_id)
     if result["success"]:
-        await message.edit_text(f"Script <code>{filename}</code> unloaded.", parse_mode=ParseMode.HTML)
-        Config.add_log(f"Script {filename} unloaded")
+        await message.edit_text(f"✅ Скрипт <code>{script_id}</code> выгружен", parse_mode=ParseMode.HTML)
+        Config.add_log(f"Script {script_id} unloaded")
     else:
-        await message.edit_text(f"Error: <code>{result['error']}</code>", parse_mode=ParseMode.HTML)
+        await message.edit_text(f"❌ Ошибка: <code>{result['error']}</code>", parse_mode=ParseMode.HTML)
 
 
-async def _cmd_reload(client: Client, message: Message, filename: str):
-    if not filename.endswith(".py"):
-        filename += ".py"
-
+async def _cmd_reload(client: Client, message: Message, script_id: str):
     loader = ScriptLoader()
-    loader.unload_script(filename)
-    result = loader.load_script(filename, client)
+    loader.unload_script(script_id)
+    result = loader.load_script(script_id, client)
     if result["success"]:
-        await message.edit_text(f"Script <code>{filename}</code> reloaded!", parse_mode=ParseMode.HTML)
-        Config.add_log(f"Script {filename} reloaded")
+        addons = result.get("addons_loaded", [])
+        text = f"✅ Скрипт <code>{script_id}</code> перезагружен!"
+        if addons:
+            text += f"\n🔌 Аддоны: {', '.join(addons)}"
+        await message.edit_text(text, parse_mode=ParseMode.HTML)
+        Config.add_log(f"Script {script_id} reloaded")
     else:
-        await message.edit_text(f"Error: <code>{result['error']}</code>", parse_mode=ParseMode.HTML)
+        await message.edit_text(f"❌ Ошибка: <code>{result['error']}</code>", parse_mode=ParseMode.HTML)
 
 
-async def _cmd_info(client: Client, message: Message, filename: str):
-    if not filename.endswith(".py"):
-        filename += ".py"
-
+async def _cmd_info(client: Client, message: Message, script_id: str):
     loader = ScriptLoader()
-    info = loader.get_script_info(filename)
+    info = loader.get_script_info(script_id)
 
     if info:
         text = (
-            f"<b>{info.get('name', filename)}</b>\n\n"
-            f"File: <code>{filename}</code>\n"
-            f"Version: {info.get('version', 'N/A')}\n"
-            f"Author: {info.get('author', 'N/A')}\n"
-            f"Description: {info.get('description', 'N/A')}\n"
-            f"Loaded: {'Yes' if filename in Config.loaded_modules else 'No'}\n"
-            f"Size: {info.get('size', 'N/A')}\n"
+            f"<b>{info.get('name', script_id)}</b>\n\n"
+            f"ID: <code>{script_id}</code>\n"
+            f"Версия: {info.get('version', '?')}\n"
+            f"Автор: {info.get('author', '?')}\n"
+            f"Описание: {info.get('description', '?')}\n"
+            f"Команда: {info.get('command', '?')}\n"
+            f"Загружен: {'Да' if info.get('loaded') else 'Нет'}\n"
+            f"Тип: {'Папка' if info.get('is_folder') else 'Файл'}\n"
+            f"Кастомный: {'Да' if info.get('is_custom') else 'Нет'}\n"
         )
+        if info.get("addons"):
+            text += "\n<b>Аддоны:</b>\n"
+            for addon in info["addons"]:
+                status = "✅" if addon.get("enabled") else "❌"
+                text += f"  {status} {addon.get('name', '?')} ({addon.get('command', '?')})\n"
+        if info.get("tabs"):
+            text += "\n<b>Веб-вкладки:</b>\n"
+            for tab in info["tabs"]:
+                text += f"  {tab.get('icon', '')} {tab.get('name', '?')}\n"
     else:
-        text = f"Script <code>{filename}</code> not found."
+        text = f"❌ Скрипт <code>{script_id}</code> не найден"
     await message.edit_text(text, parse_mode=ParseMode.HTML)
 
 
@@ -343,11 +341,11 @@ async def _cmd_unload_all(client: Client, message: Message):
     loader = ScriptLoader()
     loaded = list(Config.loaded_modules.keys())
     count = 0
-    for name in loaded:
-        result = loader.unload_script(name)
+    for sid in loaded:
+        result = loader.unload_script(sid)
         if result["success"]:
             count += 1
-    await message.edit_text(f"Unloaded: {count}/{len(loaded)}")
+    await message.edit_text(f"Выгружено: {count}/{len(loaded)}")
     Config.add_log(f"Unloaded {count} scripts")
 
 
@@ -378,7 +376,7 @@ async def run_bot():
 
     bot_client = client
 
-    # ── Built-in commands ───────────────────────────────────────────
+    # ── Built-in commands ───────────────────────────────────────────────
     client.add_handler(
         MessageHandler(mm_command, filters.command("mm", prefixes=".") & filters.me)
     )
@@ -392,7 +390,7 @@ async def run_bot():
         MessageHandler(lm_command, filters.command("lm", prefixes=".") & filters.me)
     )
 
-    # ── Auto-start scripts ───────────────────────────────────────────
+    # ── Auto-start scripts ───────────────────────────────────────────────
     loader = ScriptLoader()
     auto_result = loader.auto_load_all(client)
     if auto_result["total"] > 0:

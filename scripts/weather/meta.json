@@ -1,0 +1,9 @@
+{
+  "name": "Weather",
+  "version": "4.0",
+  "author": "Zaya",
+  "description": "Погода через Open-Meteo с ASCII-арт",
+  "command": ".wea",
+  "addons": [],
+  "tabs": []
+}

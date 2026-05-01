@@ -1,13 +1,6 @@
-"""
-Name: ping
-Version: 1.0
-Author: UserBot
-Description: Simple example script. Replies to .ping with "Pong!"
-"""
-
+"""Ping - main module"""
 
 def register(client):
-    """Register handlers when script is loaded."""
     from pyrogram import filters
     from pyrogram.types import Message
 

@@ -1,0 +1,9 @@
+{
+  "name": "Notes",
+  "version": "1.0",
+  "author": "Zaya",
+  "description": "Быстрые заметки в Telegram",
+  "command": ".note",
+  "addons": [],
+  "tabs": []
+}

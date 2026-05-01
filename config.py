@@ -21,13 +21,17 @@ class Config:
 
     # Paths
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-    SCRIPTS_DIR = os.path.join(BASE_DIR, "scripts")            # built-in scripts (tracked)
-    CUSTOM_SCRIPTS_DIR = os.path.join(BASE_DIR, "scripts_custom")  # user scripts (gitignored)
+    SCRIPTS_DIR = os.path.join(BASE_DIR, "scripts")              # built-in scripts (tracked)
+    CUSTOM_SCRIPTS_DIR = os.path.join(BASE_DIR, "scripts_custom") # user scripts (gitignored)
     BACKUPS_DIR = os.path.join(BASE_DIR, "backups")
     AUTO_START_FILE = os.path.join(CUSTOM_SCRIPTS_DIR, "auto_start.json")
+    ADDON_STATES_FILE = os.path.join(CUSTOM_SCRIPTS_DIR, "addon_states.json")
 
-    # Loaded scripts
+    # Loaded scripts: script_id -> module
     loaded_modules = {}
+    # Loaded addons: script_id -> {addon_file -> module}
+    loaded_addons = {}
+    # Script info cache
     loaded_modules_info = {}
 
     # Log buffer for web console
@@ -53,31 +57,64 @@ class Config:
 
     @classmethod
     def get_auto_start(cls) -> list:
-        """Return the list of filenames that should auto-load on startup."""
+        """Return the list of script IDs that should auto-load on startup."""
         try:
             if os.path.exists(cls.AUTO_START_FILE):
                 with open(cls.AUTO_START_FILE, "r", encoding="utf-8") as f:
                     data = json.load(f)
                 if isinstance(data, list):
-                    return [fn for fn in data if isinstance(fn, str) and fn.endswith(".py")]
+                    return [s for s in data if isinstance(s, str)]
         except Exception:
             pass
         return []
 
     @classmethod
-    def set_auto_start(cls, filename: str, enabled: bool) -> bool:
+    def set_auto_start(cls, script_id: str, enabled: bool) -> bool:
         """Add or remove a script from the auto-start list."""
-        if not filename.endswith(".py"):
-            filename += ".py"
         scripts = cls.get_auto_start()
-        if enabled and filename not in scripts:
-            scripts.append(filename)
-        elif not enabled and filename in scripts:
-            scripts.remove(filename)
+        if enabled and script_id not in scripts:
+            scripts.append(script_id)
+        elif not enabled and script_id in scripts:
+            scripts.remove(script_id)
         try:
             os.makedirs(os.path.dirname(cls.AUTO_START_FILE), exist_ok=True)
             with open(cls.AUTO_START_FILE, "w", encoding="utf-8") as f:
                 json.dump(scripts, f, indent=2, ensure_ascii=False)
+            return True
+        except Exception:
+            return False
+
+    # ── Addon states persistence ────────────────────────────────────────
+
+    @classmethod
+    def get_addon_states(cls, script_id: str) -> dict:
+        """Get enabled/disabled states for addons of a script."""
+        try:
+            if os.path.exists(cls.ADDON_STATES_FILE):
+                with open(cls.ADDON_STATES_FILE, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                if isinstance(data, dict) and script_id in data:
+                    return data[script_id]
+        except Exception:
+            pass
+        return {}
+
+    @classmethod
+    def set_addon_state(cls, script_id: str, addon_file: str, enabled: bool) -> bool:
+        """Set addon enabled/disabled state."""
+        try:
+            all_states = {}
+            if os.path.exists(cls.ADDON_STATES_FILE):
+                with open(cls.ADDON_STATES_FILE, "r", encoding="utf-8") as f:
+                    all_states = json.load(f)
+            if not isinstance(all_states, dict):
+                all_states = {}
+            if script_id not in all_states:
+                all_states[script_id] = {}
+            all_states[script_id][addon_file] = enabled
+            os.makedirs(os.path.dirname(cls.ADDON_STATES_FILE), exist_ok=True)
+            with open(cls.ADDON_STATES_FILE, "w", encoding="utf-8") as f:
+                json.dump(all_states, f, indent=2, ensure_ascii=False)
             return True
         except Exception:
             return False
