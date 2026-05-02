@@ -177,6 +177,7 @@ def create_web_app():
         """Get all available tabs from loaded scripts."""
         loader = ScriptLoader()
         tabs = loader.get_available_tabs()
+        logger.info(f"Tabs requested: found {len(tabs)} tabs, loaded_modules={list(Config.loaded_modules.keys())}")
         return jsonify({"success": True, "tabs": tabs})
 
     @app.route("/api/tabs/<tab_id>", methods=["GET"])
