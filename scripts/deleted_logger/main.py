@@ -1,17 +1,19 @@
 """
 Deleted Logger - main module
-Caches all messages and logs deleted ones. Provides web panel tab data.
+Caches all messages and logs deleted ones via RawUpdates.
+Provides web panel tab data.
 
 Commands:
-  .dl on   - enable monitoring
-  .dl off  - disable monitoring
+  .dl on     - enable monitoring
+  .dl off    - disable monitoring
   .dl status - show status
-  .dl clear - clear all logged data
+  .dl clear  - clear all logged data
 """
 
 import os
 import json
 import asyncio
+import logging
 from datetime import datetime
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -19,10 +21,12 @@ DATA_FILE = os.path.join(SCRIPT_DIR, "data.json")
 MAX_MESSAGES_PER_CHAT = 500
 MAX_CACHE_AGE_HOURS = 24
 
+logger = logging.getLogger("userbot.deleted_logger")
+
 # Module-level state
 _enabled = False
-_cache = {}       # (chat_id, msg_id) -> message_data
-_log = {}         # chat_id -> {title, type, messages: []}
+_cache = {}           # msg_id -> {chat_id, text, sender_name, sender_id, chat_title, date, media_type, has_media}
+_log = {}             # chat_id -> {title, type, messages: []}
 _save_task = None
 _cleanup_task = None
 
@@ -47,9 +51,9 @@ def _save_data():
 
 
 def _cache_message(msg):
-    """Cache a message for later deletion detection."""
-    chat_id = str(msg.chat.id)
+    """Cache a message by msg_id for deletion detection."""
     msg_id = msg.id
+    chat_id = str(msg.chat.id)
 
     media_type = None
     if msg.photo:
@@ -78,12 +82,14 @@ def _cache_message(msg):
         if msg.from_user.username:
             sender_name += f" (@{msg.from_user.username})"
         sender_id = msg.from_user.id
+    elif msg.sender_chat:
+        sender_name = msg.sender_chat.title or ""
 
-    _cache[(chat_id, msg_id)] = {
+    _cache[msg_id] = {
+        "chat_id": chat_id,
         "text": msg.text or msg.caption or "",
         "sender_name": sender_name,
         "sender_id": sender_id,
-        "chat_id": chat_id,
         "chat_title": msg.chat.title or msg.chat.first_name or "",
         "date": msg.date.isoformat() if msg.date else datetime.utcnow().isoformat(),
         "media_type": media_type,
@@ -91,52 +97,44 @@ def _cache_message(msg):
     }
 
 
-def _log_deleted(chat_id, msg_ids):
-    """Log deleted messages by looking them up in cache."""
-    chat_id_str = str(chat_id)
-    logged = []
+def _log_deleted(msg_id, channel_id=None):
+    """Look up msg_id in cache and log it if found."""
+    cached = _cache.pop(msg_id, None)
+    if not cached:
+        return
 
-    for msg_id in msg_ids:
-        key = (chat_id_str, msg_id)
-        cached = _cache.pop(key, None)
-        if not cached:
-            continue
+    chat_id_str = cached["chat_id"]
 
-        # Get or create chat entry
-        if chat_id_str not in _log:
-            _log[chat_id_str] = {
-                "title": cached.get("chat_title", "Unknown"),
-                "type": "group" if cached.get("chat_id", "").startswith("-") else "private",
-                "messages": [],
-            }
-
-        chat_data = _log[chat_id_str]
-        # Keep chat title updated
-        if cached.get("chat_title"):
-            chat_data["title"] = cached["chat_title"]
-
-        entry = {
-            "id": msg_id,
-            "text": cached["text"],
-            "sender_name": cached.get("sender_name", ""),
-            "sender_id": cached.get("sender_id"),
-            "date": cached["date"],
-            "deleted_at": datetime.utcnow().isoformat(),
-            "has_media": cached.get("has_media", False),
-            "media_type": cached.get("media_type"),
+    if chat_id_str not in _log:
+        chat_id_int = chat_id_str
+        _log[chat_id_str] = {
+            "title": cached.get("chat_title", "Unknown"),
+            "type": "private" if chat_id_int.startswith("1") or (chat_id_int.lstrip("-").isdigit() and not chat_id_int.startswith("-100")) else "group",
+            "messages": [],
         }
 
-        chat_data["messages"].insert(0, entry)
-        logged.append(entry)
+    chat_data = _log[chat_id_str]
+    if cached.get("chat_title"):
+        chat_data["title"] = cached["chat_title"]
 
-        # Limit messages per chat
-        if len(chat_data["messages"]) > MAX_MESSAGES_PER_CHAT:
-            chat_data["messages"] = chat_data["messages"][:MAX_MESSAGES_PER_CHAT]
+    entry = {
+        "id": msg_id,
+        "text": cached["text"],
+        "sender_name": cached.get("sender_name", ""),
+        "sender_id": cached.get("sender_id"),
+        "date": cached["date"],
+        "deleted_at": datetime.utcnow().isoformat(),
+        "has_media": cached.get("has_media", False),
+        "media_type": cached.get("media_type"),
+    }
 
-    if logged:
-        _save_data()
+    chat_data["messages"].insert(0, entry)
 
-    return logged
+    if len(chat_data["messages"]) > MAX_MESSAGES_PER_CHAT:
+        chat_data["messages"] = chat_data["messages"][:MAX_MESSAGES_PER_CHAT]
+
+    _save_data()
+    logger.info(f"Deleted msg {msg_id} in {chat_id_str}: {cached['text'][:50]}...")
 
 
 def register(client):
@@ -144,37 +142,47 @@ def register(client):
     from pyrogram import filters
     from pyrogram.enums import ParseMode
     from pyrogram.types import Message
+    from pyrogram.raw.types import UpdateDeleteMessages, UpdateDeleteChannelMessages
 
-    # ── Cache ALL incoming messages ───────────────────────────────
+    # ── Cache ALL incoming messages (others) ──────────────────────
     @client.on_message(~filters.me & ~filters.service, group=-1)
     async def cache_handler(client, message: Message):
         if not _enabled:
             return
         try:
             _cache_message(message)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Cache error: {e}")
 
-    # ── Also cache own messages ───────────────────────────────────
+    # ── Cache own messages ───────────────────────────────────────
     @client.on_message(filters.me & ~filters.command("dl", prefixes="."), group=-1)
     async def cache_own_handler(client, message: Message):
         if not _enabled:
             return
         try:
             _cache_message(message)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Cache error: {e}")
 
-    # ── Detect deleted messages ───────────────────────────────────
-    @client.on_deleted_messages(group=-1)
-    async def deleted_handler(client, messages):
+    # ── Detect deleted messages via RawUpdates ────────────────────
+    @client.on_raw_updates()
+    async def raw_deleted(client, update, users, chats):
         if not _enabled:
             return
         try:
-            for msg in messages:
-                _log_deleted(msg.chat.id, [msg.id])
-        except Exception:
-            pass
+            if isinstance(update, UpdateDeleteMessages):
+                # Private chat / basic group deletion
+                for msg_id in update.messages:
+                    _log_deleted(msg_id)
+
+            elif isinstance(update, UpdateDeleteChannelMessages):
+                # Channel / supergroup deletion
+                # We know the channel_id, but cache already has it
+                for msg_id in update.messages:
+                    _log_deleted(msg_id)
+
+        except Exception as e:
+            logger.debug(f"Raw update error: {e}")
 
     # ── .dl command ───────────────────────────────────────────────
     @client.on_message(filters.command("dl", prefixes=".") & filters.me)
@@ -191,6 +199,7 @@ def register(client):
             _load_data()
             _save_task = asyncio.create_task(_periodic_save())
             _cleanup_task = asyncio.create_task(_periodic_cleanup())
+            logger.info("Deleted logger ENABLED")
             await message.edit_text(
                 "✅ Логгер удалённых сообщений <b>включён</b>\n\n"
                 "🗑 Все входящие сообщения кешируются.\n"
@@ -211,6 +220,7 @@ def register(client):
                 _cleanup_task.cancel()
                 _cleanup_task = None
             _cache.clear()
+            logger.info("Deleted logger DISABLED")
             await message.edit_text("⏹ Логгер <b>выключен</b>", parse_mode=ParseMode.HTML)
             return
 
@@ -218,6 +228,7 @@ def register(client):
             global _log
             _log = {}
             _save_data()
+            logger.info("Deleted logger data CLEARED")
             await message.edit_text("✅ Лог очищен", parse_mode=ParseMode.HTML)
             return
 
@@ -247,12 +258,10 @@ def register(client):
 
 
 async def _periodic_save():
-    """Periodically save data to disk."""
     while True:
         try:
             await asyncio.sleep(30)
-            if _enabled:
-                _save_data()
+            # data is saved on each deletion, this is a safety net
         except asyncio.CancelledError:
             break
         except Exception:
@@ -260,23 +269,24 @@ async def _periodic_save():
 
 
 async def _periodic_cleanup():
-    """Periodically clean old cache entries."""
     while True:
         try:
-            await asyncio.sleep(300)  # every 5 min
-            if _enabled:
+            await asyncio.sleep(300)
+            if _enabled and _cache:
                 now = datetime.utcnow()
                 to_remove = []
-                for key, data in _cache.items():
+                for msg_id, data in _cache.items():
                     try:
                         msg_date = datetime.fromisoformat(data["date"])
                         age = (now - msg_date).total_seconds() / 3600
                         if age > MAX_CACHE_AGE_HOURS:
-                            to_remove.append(key)
+                            to_remove.append(msg_id)
                     except Exception:
-                        to_remove.append(key)
-                for key in to_remove:
-                    _cache.pop(key, None)
+                        to_remove.append(msg_id)
+                for msg_id in to_remove:
+                    _cache.pop(msg_id, None)
+                if to_remove:
+                    logger.debug(f"Cache cleanup: removed {len(to_remove)} old entries")
         except asyncio.CancelledError:
             break
         except Exception:
