@@ -1,6 +1,6 @@
 """
 Deleted Logger - main module
-Caches all messages and logs deleted ones via RawUpdates.
+Caches all messages and logs deleted ones via RawUpdateHandler.
 Provides web panel tab data.
 
 Commands:
@@ -97,7 +97,7 @@ def _cache_message(msg):
     }
 
 
-def _log_deleted(msg_id, channel_id=None):
+def _log_deleted(msg_id):
     """Look up msg_id in cache and log it if found."""
     cached = _cache.pop(msg_id, None)
     if not cached:
@@ -106,10 +106,9 @@ def _log_deleted(msg_id, channel_id=None):
     chat_id_str = cached["chat_id"]
 
     if chat_id_str not in _log:
-        chat_id_int = chat_id_str
         _log[chat_id_str] = {
             "title": cached.get("chat_title", "Unknown"),
-            "type": "private" if chat_id_int.startswith("1") or (chat_id_int.lstrip("-").isdigit() and not chat_id_int.startswith("-100")) else "group",
+            "type": "private" if chat_id_str.startswith("1") or (chat_id_str.lstrip("-").isdigit() and not chat_id_str.startswith("-100")) else "group",
             "messages": [],
         }
 
@@ -134,7 +133,7 @@ def _log_deleted(msg_id, channel_id=None):
         chat_data["messages"] = chat_data["messages"][:MAX_MESSAGES_PER_CHAT]
 
     _save_data()
-    logger.info(f"Deleted msg {msg_id} in {chat_id_str}: {cached['text'][:50]}...")
+    logger.info(f"Deleted msg {msg_id} in {chat_id_str}: {cached['text'][:50]}")
 
 
 def register(client):
@@ -142,7 +141,14 @@ def register(client):
     from pyrogram import filters
     from pyrogram.enums import ParseMode
     from pyrogram.types import Message
-    from pyrogram.raw.types import UpdateDeleteMessages, UpdateDeleteChannelMessages
+
+    try:
+        from pyrogram.handlers import RawUpdateHandler
+        from pyrogram.raw.types import UpdateDeleteMessages, UpdateDeleteChannelMessages
+        HAS_RAW = True
+    except ImportError:
+        HAS_RAW = False
+        logger.warning("RawUpdateHandler not available, using on_deleted_messages fallback")
 
     # ── Cache ALL incoming messages (others) ──────────────────────
     @client.on_message(~filters.me & ~filters.service, group=-1)
@@ -165,24 +171,34 @@ def register(client):
             logger.debug(f"Cache error: {e}")
 
     # ── Detect deleted messages via RawUpdates ────────────────────
-    @client.on_raw_updates()
-    async def raw_deleted(client, update, users, chats):
-        if not _enabled:
-            return
-        try:
-            if isinstance(update, UpdateDeleteMessages):
-                # Private chat / basic group deletion
-                for msg_id in update.messages:
-                    _log_deleted(msg_id)
+    if HAS_RAW:
+        async def raw_deleted(client, update, users, chats):
+            if not _enabled:
+                return
+            try:
+                if isinstance(update, UpdateDeleteMessages):
+                    for msg_id in update.messages:
+                        _log_deleted(msg_id)
+                elif isinstance(update, UpdateDeleteChannelMessages):
+                    for msg_id in update.messages:
+                        _log_deleted(msg_id)
+            except Exception as e:
+                logger.debug(f"Raw update error: {e}")
 
-            elif isinstance(update, UpdateDeleteChannelMessages):
-                # Channel / supergroup deletion
-                # We know the channel_id, but cache already has it
-                for msg_id in update.messages:
-                    _log_deleted(msg_id)
-
-        except Exception as e:
-            logger.debug(f"Raw update error: {e}")
+        client.add_handler(RawUpdateHandler(raw_deleted))
+        logger.info("Deleted logger: using RawUpdateHandler")
+    else:
+        # Fallback: use on_deleted_messages (less reliable but works)
+        @client.on_deleted_messages()
+        async def deleted_handler(client, messages):
+            if not _enabled:
+                return
+            try:
+                for msg in messages:
+                    _log_deleted(msg.id)
+            except Exception as e:
+                logger.debug(f"Deleted messages error: {e}")
+        logger.info("Deleted logger: using on_deleted_messages fallback")
 
     # ── .dl command ───────────────────────────────────────────────
     @client.on_message(filters.command("dl", prefixes=".") & filters.me)
@@ -261,7 +277,6 @@ async def _periodic_save():
     while True:
         try:
             await asyncio.sleep(30)
-            # data is saved on each deletion, this is a safety net
         except asyncio.CancelledError:
             break
         except Exception:
