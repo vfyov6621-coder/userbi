@@ -1,13 +1,6 @@
 """
-Deleted Logger - main module
-Caches all messages and logs deleted ones.
-Provides web panel tab data.
-
-Commands:
-  .dl on     - enable monitoring
-  .dl off    - disable monitoring
-  .dl status - show status
-  .dl clear  - clear all logged data
+Deleted Logger - logs deleted messages.
+Commands: .dl on / off / status / clear
 """
 
 import os
@@ -23,7 +16,6 @@ MAX_CACHE_AGE_HOURS = 24
 
 logger = logging.getLogger("userbot.deleted_logger")
 
-# Module-level state
 _enabled = False
 _cache = {}
 _log = {}
@@ -51,10 +43,8 @@ def _save_data():
 
 
 def _cache_message(msg):
-    """Cache a message by msg_id for deletion detection."""
     msg_id = msg.id
     chat_id = str(msg.chat.id)
-
     media_type = None
     if msg.photo:
         media_type = "photo"
@@ -66,13 +56,10 @@ def _cache_message(msg):
         media_type = "audio"
     elif msg.voice:
         media_type = "voice"
-    elif msg.video_note:
-        media_type = "video_note"
     elif msg.sticker:
         media_type = "sticker"
     elif msg.animation:
         media_type = "animation"
-
     sender_name = ""
     sender_id = None
     if msg.from_user:
@@ -84,7 +71,6 @@ def _cache_message(msg):
         sender_id = msg.from_user.id
     elif msg.sender_chat:
         sender_name = msg.sender_chat.title or ""
-
     _cache[msg_id] = {
         "chat_id": chat_id,
         "text": msg.text or msg.caption or "",
@@ -98,24 +84,19 @@ def _cache_message(msg):
 
 
 def _log_deleted(msg_id):
-    """Look up msg_id in cache and log it if found."""
     cached = _cache.pop(msg_id, None)
     if not cached:
         return
-
     chat_id_str = cached["chat_id"]
-
     if chat_id_str not in _log:
         _log[chat_id_str] = {
             "title": cached.get("chat_title", "Unknown"),
             "type": "private" if chat_id_str.startswith("1") or (chat_id_str.lstrip("-").isdigit() and not chat_id_str.startswith("-100")) else "group",
             "messages": [],
         }
-
     chat_data = _log[chat_id_str]
     if cached.get("chat_title"):
         chat_data["title"] = cached["chat_title"]
-
     entry = {
         "id": msg_id,
         "text": cached["text"],
@@ -126,12 +107,9 @@ def _log_deleted(msg_id):
         "has_media": cached.get("has_media", False),
         "media_type": cached.get("media_type"),
     }
-
     chat_data["messages"].insert(0, entry)
-
     if len(chat_data["messages"]) > MAX_MESSAGES_PER_CHAT:
         chat_data["messages"] = chat_data["messages"][:MAX_MESSAGES_PER_CHAT]
-
     _save_data()
     logger.info(f"Deleted msg {msg_id} in {chat_id_str}: {cached['text'][:50]}")
 
@@ -142,13 +120,11 @@ def register(client):
     from pyrogram.enums import ParseMode
     from pyrogram.types import Message
 
-    # ============================================================
-    # STEP 1: Register .dl command handler FIRST
-    #         This must work regardless of RawUpdate availability
-    # ============================================================
+    print("[DeletedLogger] register() called — registering .dl handler")
+
     @client.on_message(filters.command("dl", prefixes=".") & filters.me)
     async def dl_handler(client, message: Message):
-        global _enabled, _save_task, _cleanup_task
+        global _enabled, _save_task, _cleanup_task, _log
         args = message.text.split(maxsplit=1)
         action = (args[1] or "").strip().lower() if len(args) > 1 else ""
 
@@ -186,7 +162,6 @@ def register(client):
             return
 
         if action == "clear":
-            global _log
             _log = {}
             _save_data()
             logger.info("Deleted logger data CLEARED")
@@ -217,9 +192,7 @@ def register(client):
             parse_mode=ParseMode.HTML,
         )
 
-    # ============================================================
-    # STEP 2: Register cache handlers (safe, no risky imports)
-    # ============================================================
+    # Cache handlers
     @client.on_message(~filters.me & ~filters.service, group=-1)
     async def cache_handler(client, message: Message):
         if not _enabled:
@@ -238,10 +211,14 @@ def register(client):
         except Exception as e:
             logger.debug(f"Cache error: {e}")
 
-    # ============================================================
-    # STEP 3: Register deleted message detection (isolated try/except)
-    #         If this fails, command + cache handlers still work
-    # ============================================================
+    # Deleted message detection — try multiple methods
+    _register_deleted_handler(client)
+
+    print("[DeletedLogger] register() done — all handlers set up")
+
+
+def _register_deleted_handler(client):
+    """Try to register a handler for deleted messages. Best effort."""
     try:
         from pyrogram.handlers import RawUpdateHandler
         from pyrogram.raw.types import UpdateDeleteMessages, UpdateDeleteChannelMessages
@@ -251,32 +228,37 @@ def register(client):
                 return
             try:
                 if isinstance(update, UpdateDeleteMessages):
-                    for msg_id in update.messages:
-                        _log_deleted(msg_id)
+                    for mid in update.messages:
+                        _log_deleted(mid)
                 elif isinstance(update, UpdateDeleteChannelMessages):
-                    for msg_id in update.messages:
-                        _log_deleted(msg_id)
+                    for mid in update.messages:
+                        _log_deleted(mid)
             except Exception as e:
                 logger.debug(f"Raw update error: {e}")
 
         client.add_handler(RawUpdateHandler(raw_deleted))
-        logger.info("Deleted logger: using RawUpdateHandler")
-
+        print("[DeletedLogger] deletion detection: RawUpdateHandler")
+        return
     except Exception as e:
-        logger.warning(f"RawUpdateHandler failed ({e}), trying on_deleted_messages fallback")
-        try:
-            @client.on_deleted_messages()
-            async def deleted_handler(client, messages):
-                if not _enabled:
-                    return
-                try:
-                    for msg in messages:
-                        _log_deleted(msg.id)
-                except Exception as ex:
-                    logger.debug(f"Deleted messages error: {ex}")
-            logger.info("Deleted logger: using on_deleted_messages fallback")
-        except Exception as e2:
-            logger.error(f"on_deleted_messages also failed ({e2}), deletion detection disabled")
+        print(f"[DeletedLogger] RawUpdateHandler unavailable: {e}")
+
+    try:
+        @client.on_deleted_messages()
+        async def fallback_deleted(client, messages):
+            if not _enabled:
+                return
+            try:
+                for msg in messages:
+                    _log_deleted(msg.id)
+            except Exception as e:
+                logger.debug(f"fallback error: {e}")
+
+        print("[DeletedLogger] deletion detection: on_deleted_messages")
+        return
+    except Exception as e:
+        print(f"[DeletedLogger] on_deleted_messages unavailable: {e}")
+
+    print("[DeletedLogger] deletion detection: NONE (detection disabled)")
 
 
 async def _periodic_save():
@@ -306,8 +288,6 @@ async def _periodic_cleanup():
                         to_remove.append(msg_id)
                 for msg_id in to_remove:
                     _cache.pop(msg_id, None)
-                if to_remove:
-                    logger.debug(f"Cache cleanup: removed {len(to_remove)} old entries")
         except asyncio.CancelledError:
             break
         except Exception:
@@ -315,10 +295,8 @@ async def _periodic_cleanup():
 
 
 def get_tab_data(tab_id, **params):
-    """Return data for the web panel tab."""
     action = params.get("action", "list_chats")
     chat_id = params.get("chat_id")
-
     if action == "list_chats":
         chats = []
         for cid, data in _log.items():
@@ -333,7 +311,6 @@ def get_tab_data(tab_id, **params):
                 })
         chats.sort(key=lambda x: x.get("last_deleted", ""), reverse=True)
         return {"success": True, "chats": chats, "enabled": _enabled}
-
     if action == "chat_messages" and chat_id:
         chat_data = _log.get(str(chat_id))
         if not chat_data:
@@ -348,7 +325,6 @@ def get_tab_data(tab_id, **params):
             },
             "messages": chat_data.get("messages", []),
         }
-
     return {"success": True, "chats": [], "enabled": _enabled}
 
 
