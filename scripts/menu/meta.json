@@ -1,0 +1,9 @@
+{
+  "name": "Menu System",
+  "version": "1.0",
+  "author": "Zaya",
+  "description": "Продвинутое inline-меню с вложенными разделами, cooldown и защитой",
+  "command": ".menu",
+  "addons": [],
+  "tabs": []
+}
