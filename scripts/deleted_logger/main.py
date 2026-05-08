@@ -193,7 +193,7 @@ def register(client):
         )
 
     # Cache handlers
-    @client.on_message(~filters.me & ~filters.service, group=-1)
+    @client.on_message(~filters.me & ~filters.service, group=1)
     async def cache_handler(client, message: Message):
         if not _enabled:
             return
@@ -202,7 +202,7 @@ def register(client):
         except Exception as e:
             logger.debug(f"Cache error: {e}")
 
-    @client.on_message(filters.me & ~filters.command("dl", prefixes="."), group=-1)
+    @client.on_message(filters.me & ~filters.command("dl", prefixes="."), group=1)
     async def cache_own_handler(client, message: Message):
         if not _enabled:
             return
