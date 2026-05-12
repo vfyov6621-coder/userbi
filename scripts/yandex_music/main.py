@@ -72,11 +72,33 @@ def _save_token(token):
 # ════════════════════════════════════════════════════════════════
 
 def _api_request(path, token, timeout=10):
-    """GET запрос к API Яндекс Музыки."""
-    url = f"{API_BASE}{path}?oauth_token={token}"
+    """GET запрос к API Яндекс Музыки через cookie (sessar)."""
+    url = f"{API_BASE}{path}"
     req = urllib.request.Request(url, headers={
-        "User-Agent": "Mozilla/5.0",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
         "Accept": "application/json",
+        "Cookie": f"sessar={token}",
+        "Origin": "https://music.yandex.ru",
+        "Referer": "https://music.yandex.ru/",
+        "X-Yandex-Music-Client": "YandexMusicWebNext/1.0.0",
+    })
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        return json.loads(resp.read().decode("utf-8"))
+
+
+def _api_post(path, token, post_data=None, timeout=10):
+    """POST запрос к API Яндекс Музыки через cookie (sessar)."""
+    url = f"{API_BASE}{path}"
+    body = json.dumps(post_data).encode() if post_data else None
+    req = urllib.request.Request(url, data=body, headers={
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+        "Cookie": f"sessar={token}",
+        "Origin": "https://music.yandex.ru",
+        "Referer": "https://music.yandex.ru/",
+        "X-Yandex-Music-Client": "YandexMusicWebNext/1.0.0",
+        "X-Requested-With": "XMLHttpRequest",
     })
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         return json.loads(resp.read().decode("utf-8"))
@@ -85,45 +107,52 @@ def _api_request(path, token, timeout=10):
 async def _get_current_track(token):
     """
     Получить текущий играющий трек.
-    Возвращает dict с track info или None если ничего не играет.
+    Пробуем несколько методов: queues, landing, feed.
     """
     loop = asyncio.get_event_loop()
 
+    # Метод 1: через queues
     try:
-        # Получаем список очередей
         queues_data = await loop.run_in_executor(
             None, _api_request, "/queues", token
         )
-
         queues = queues_data.get("queues", [])
-        if not queues:
-            return None
+        if queues:
+            queue_id = queues[0].get("id", "")
+            if queue_id:
+                queue_data = await loop.run_in_executor(
+                    None, _api_request, f"/queues/{queue_id}", token
+                )
+                tracks = queue_data.get("tracks", [])
+                current_idx = queue_data.get("currentPlayingIndex", -1)
+                if tracks and 0 <= current_idx < len(tracks):
+                    track = tracks[current_idx].get("track", {})
+                    if track:
+                        return track
+    except Exception as e:
+        logger.debug(f"Queues method failed: {e}")
 
-        # Берём первую очередь (текущая)
-        queue_id = queues[0].get("id", "")
-        if not queue_id:
-            return None
-
-        # Получаем детали очереди
-        queue_data = await loop.run_in_executor(
-            None, _api_request, f"/queues/{queue_id}", token
+    # Метод 2: через player/queue (новый API)
+    try:
+        player_data = await loop.run_in_executor(
+            None, _api_request, "/player/queue", token
         )
+        if player_data:
+            queue = player_data.get("queue", {})
+            tracks = queue.get("tracks", []) if queue else []
+            current_idx = player_data.get("currentIndex", -1)
+            if tracks and 0 <= current_idx < len(tracks):
+                track = tracks[current_idx].get("track", {})
+                if track:
+                    return track
+    except Exception as e:
+        logger.debug(f"Player method failed: {e}")
 
-        tracks = queue_data.get("tracks", [])
-        current_idx = queue_data.get("currentPlayingIndex", -1)
-
-        if not tracks or current_idx < 0 or current_idx >= len(tracks):
-            return None
-
-        track = tracks[current_idx].get("track", {})
-        if not track:
-            return None
-
-        return track
+    return None
 
     except urllib.error.HTTPError as e:
         if e.code == 401:
-            logger.error("Yandex Music: токен невалиден или истёк")
+            logger.error("Yandex Music: sessar невалиден или истёк")
         elif e.code == 403:
             logger.error("Yandex Music: доступ запрещён")
         else:
