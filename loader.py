@@ -1,5 +1,5 @@
 """
-ScriptLoader — модульная загрузка скриптов для Zaya.
+ScriptLoader — модульная загрузка скриптов для sandusr.
 """
 
 import os
@@ -24,6 +24,10 @@ class ScriptLoader:
         self.custom_dir = Config.CUSTOM_SCRIPTS_DIR
         os.makedirs(self.builtin_dir, exist_ok=True)
         os.makedirs(self.custom_dir, exist_ok=True)
+
+    # ═══════════════════════════════════════════════════════════════════
+    #  Scanning
+    # ═══════════════════════════════════════════════════════════════════
 
     def _scan_folders(self, directory):
         result = []
@@ -70,6 +74,10 @@ class ScriptLoader:
                 return True
         return False
 
+    # ═══════════════════════════════════════════════════════════════════
+    #  Resolution
+    # ═══════════════════════════════════════════════════════════════════
+
     def _resolve_dir(self, script_id):
         custom = os.path.join(self.custom_dir, script_id)
         if os.path.exists(os.path.join(custom, "meta.json")):
@@ -88,6 +96,15 @@ class ScriptLoader:
         if os.path.exists(builtin):
             return builtin, False
         return None
+
+    def _load_key(self, script_id):
+        if self.is_folder_script(script_id):
+            return script_id
+        return script_id if script_id.endswith(".py") else f"{script_id}.py"
+
+    # ═══════════════════════════════════════════════════════════════════
+    #  Meta & Info
+    # ═══════════════════════════════════════════════════════════════════
 
     def get_script_meta(self, script_id):
         resolved = self._resolve_dir(script_id)
@@ -177,6 +194,10 @@ class ScriptLoader:
         except Exception:
             return None
 
+    # ═══════════════════════════════════════════════════════════════════
+    #  Loading
+    # ═══════════════════════════════════════════════════════════════════
+
     def load_script(self, script_id, client=None):
         load_key = self._load_key(script_id)
         if load_key in Config.loaded_modules:
@@ -186,11 +207,6 @@ class ScriptLoader:
         elif self.is_legacy_script(script_id):
             return self._load_legacy(script_id, client)
         return {"success": False, "error": f"{script_id} not found"}
-
-    def _load_key(self, script_id):
-        if self.is_folder_script(script_id):
-            return script_id
-        return script_id if script_id.endswith(".py") else f"{script_id}.py"
 
     def _load_folder(self, script_id, client=None):
         resolved = self._resolve_dir(script_id)
@@ -205,7 +221,7 @@ class ScriptLoader:
             return {"success": False, "error": "main.py not found"}
 
         try:
-            module_name = "zaya_" + script_id
+            module_name = "sandusr_" + script_id
             if module_name in sys.modules:
                 del sys.modules[module_name]
 
@@ -227,6 +243,7 @@ class ScriptLoader:
             Config.loaded_modules[script_id] = module
             Config.loaded_modules_info[script_id] = self.get_script_info(script_id) or {}
 
+            # Load addons
             addon_states = Config.get_addon_states(script_id)
             loaded_addons = []
             for addon in meta.get("addons", []):
@@ -253,7 +270,7 @@ class ScriptLoader:
         if not os.path.exists(addon_path):
             return {"success": False, "error": f"{addon_file} not found"}
         try:
-            addon_name = "zaya_" + script_id + "_" + addon_file.replace("/", "_").replace(".py", "")
+            addon_name = "sandusr_" + script_id + "_" + addon_file.replace("/", "_").replace(".py", "")
             if addon_name in sys.modules:
                 del sys.modules[addon_name]
 
@@ -287,7 +304,7 @@ class ScriptLoader:
         if filename in Config.loaded_modules:
             return {"success": False, "error": f"{filename} already loaded"}
         try:
-            module_name = "zaya_legacy_" + filename.replace(".py", "")
+            module_name = "sandusr_legacy_" + filename.replace(".py", "")
             if module_name in sys.modules:
                 del sys.modules[module_name]
 
@@ -314,6 +331,10 @@ class ScriptLoader:
             traceback.print_exc()
             return {"success": False, "error": error_msg}
 
+    # ═══════════════════════════════════════════════════════════════════
+    #  Unloading
+    # ═══════════════════════════════════════════════════════════════════
+
     def unload_script(self, script_id):
         load_key = self._load_key(script_id)
         actual_key = load_key if load_key in Config.loaded_modules else script_id
@@ -324,20 +345,22 @@ class ScriptLoader:
 
         module = Config.loaded_modules[actual_key]
         try:
+            # Unload addons first
             addons = Config.loaded_addons.get(actual_key, {})
             for addon_file, addon_module in addons.items():
                 if hasattr(addon_module, "on_unload"):
                     addon_module.on_unload()
-                addon_name = "zaya_" + actual_key + "_" + addon_file.replace("/", "_").replace(".py", "")
+                addon_name = "sandusr_" + actual_key + "_" + addon_file.replace("/", "_").replace(".py", "")
                 sys.modules.pop(addon_name, None)
             Config.loaded_addons.pop(actual_key, None)
 
+            # Unload main module
             if hasattr(module, "on_unload"):
                 module.on_unload()
             if not actual_key.endswith(".py"):
-                mod_name = "zaya_" + actual_key
+                mod_name = "sandusr_" + actual_key
             else:
-                mod_name = "zaya_legacy_" + actual_key.replace(".py", "")
+                mod_name = "sandusr_legacy_" + actual_key.replace(".py", "")
             sys.modules.pop(mod_name, None)
 
             del Config.loaded_modules[actual_key]
@@ -349,6 +372,10 @@ class ScriptLoader:
             logger.error(f"Error unloading {script_id}: {error_msg}")
             return {"success": False, "error": error_msg}
 
+    # ═══════════════════════════════════════════════════════════════════
+    #  Auto-start
+    # ═══════════════════════════════════════════════════════════════════
+
     def auto_load_all(self, client=None):
         scripts = Config.get_auto_start()
         loaded, failed = [], []
@@ -359,6 +386,10 @@ class ScriptLoader:
             else:
                 failed.append({"file": item, "error": result.get("error", "?")})
         return {"success": True, "loaded": loaded, "failed": failed, "total": len(scripts)}
+
+    # ═══════════════════════════════════════════════════════════════════
+    #  Tabs (for web panel)
+    # ═══════════════════════════════════════════════════════════════════
 
     def get_available_tabs(self):
         tabs = []
@@ -386,6 +417,10 @@ class ScriptLoader:
                 except Exception as e:
                     logger.error(f"Tab data error from {script_id}: {e}")
         return {"success": False, "error": "Tab not found"}
+
+    # ═══════════════════════════════════════════════════════════════════
+    #  Source read/write
+    # ═══════════════════════════════════════════════════════════════════
 
     def get_script_source(self, script_id, subpath="main.py"):
         if self.is_folder_script(script_id):
@@ -449,6 +484,10 @@ class ScriptLoader:
                 return {"success": True}
             return {"success": False, "error": f"{script_id} not found or built-in"}
 
+    # ═══════════════════════════════════════════════════════════════════
+    #  Backups
+    # ═══════════════════════════════════════════════════════════════════
+
     def create_backup(self):
         os.makedirs(Config.BACKUPS_DIR, exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -481,6 +520,10 @@ class ScriptLoader:
                         "date": datetime.fromtimestamp(os.path.getmtime(p)).strftime("%Y-%m-%d %H:%M:%S"),
                     })
         return backups
+
+    # ═══════════════════════════════════════════════════════════════════
+    #  Utilities
+    # ═══════════════════════════════════════════════════════════════════
 
     @staticmethod
     def _fmt_size(n):

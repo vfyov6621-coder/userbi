@@ -1,7 +1,7 @@
 {
   "name": "Who TGK",
   "version": "1.0",
-  "author": "Zaya",
+  "author": "sandusr",
   "description": "Узнать информацию о пользователе Telegram — кто за аккаунтом",
   "command": ".whotgk",
   "addons": [],

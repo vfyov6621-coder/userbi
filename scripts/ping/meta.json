@@ -1,7 +1,7 @@
 {
   "name": "Ping",
   "version": "1.0",
-  "author": "Zaya",
+  "author": "sandusr",
   "description": "Простой пинг юзербота",
   "command": ".ping",
   "addons": [],

@@ -1,7 +1,7 @@
 {
   "name": "Weather",
   "version": "4.0",
-  "author": "Zaya",
+  "author": "sandusr",
   "description": "Погода через Open-Meteo с ASCII-арт",
   "command": ".wea",
   "addons": [],

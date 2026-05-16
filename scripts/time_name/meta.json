@@ -1,7 +1,7 @@
 {
   "name": "TimeName",
   "version": "1.0",
-  "author": "Zaya",
+  "author": "sandusr",
   "description": "Время по МСК в нике",
   "command": ".tn",
   "addons": [],

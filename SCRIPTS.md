@@ -1,4 +1,4 @@
-# Zaya UserBot — Руководство по скриптам
+# sandusr UserBot — Руководство по скриптам
 
 ## Содержание
 
@@ -46,7 +46,7 @@ scripts/
 {
   "name": "My Script",
   "version": "1.0",
-  "author": "Zaya",
+  "author": "sandusr",
   "description": "Описание скрипта",
   "command": ".myscript",
   "addons": [],
@@ -307,7 +307,7 @@ scripts/
 {
   "name": "Counter",
   "version": "1.0",
-  "author": "Zaya",
+  "author": "sandusr",
   "description": "Счётчик сообщений с веб-статистикой",
   "command": ".counter",
   "addons": [],

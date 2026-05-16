@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Zaya UserBot</title>
+    <title>sandusr UserBot</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         :root {
@@ -162,7 +162,7 @@
 <div id="app">
     <div class="sidebar">
         <div class="sidebar-header">
-            <h1><span>&#128737;</span><span>Zaya</span><span class="badge">v2.0</span></h1>
+            <h1><span>&#128737;</span><span>sandusr</span><span class="badge">v2.0</span></h1>
         </div>
         <div class="sidebar-nav" id="sidebar-nav">
             <div class="nav-section">Система</div>
@@ -504,111 +504,7 @@ async function loadTabs(){
 }
 
 async function refreshTabContent(tabId){
-    if(tabId==='deleted_logger'){
-        await loadLoggerData();
-    }
-}
-
-// ── Deleted Logger Tab ──────────────────────────────────────
-let selectedLoggerChat=null;
-
-async function loadLoggerData(){
-    const pageId='page-tab-deleted_logger';
-    const page=document.getElementById(pageId);
-    if(!page)return;
-
-    // Fetch chat list
-    const data=await api('GET','/tabs/deleted_logger?action=list_chats');
-    if(!data||!data.success)return;
-
-    const chats=data.chats||[];
-    const enabled=data.enabled||false;
-
-    if(selectedLoggerChat===null && chats.length>0){
-        selectedLoggerChat=chats[0].id;
-    }
-
-    let chatsHtml='';
-    chats.forEach(chat=>{
-        const active=chat.id===selectedLoggerChat?'active':'';
-        chatsHtml+=`<div class="logger-chat-item ${active}" onclick="selectLoggerChat('${escapeHtml(chat.id)}')">
-            <div class="logger-chat-title">${chat.type==='private'?'&#128100;':'&#128172;'} ${escapeHtml(chat.title)}</div>
-            <div class="logger-chat-meta">${chat.count} удал. &middot; ${escapeHtml(chat.last_deleted?chat.last_deleted.substring(0,16):'')}</div>
-        </div>`;
-    });
-
-    page.innerHTML=`
-        <div class="page-header"><div><h2>&#128465; Удалённые сообщения</h2><div class="subtitle">Логгер удалённых сообщений из чатов</div></div></div>
-        <div class="logger-layout">
-            <div class="logger-chats">
-                <div class="logger-status">
-                    <div class="logger-status-dot ${enabled?'on':'off'}"></div>
-                    <span>Логгер: <b>${enabled?'Включён':'Выключен'}</b></span>
-                    <span style="margin-left:auto;font-size:11px;color:var(--text-muted)">${chats.length} чатов</span>
-                </div>
-                <div class="logger-chats-header">&#128172; Чаты</div>
-                <div class="logger-chats-list">
-                    ${chatsHtml||'<div class="empty-state" style="padding:24px"><div class="icon">&#128465;</div><p>Нет данных</p><p style="font-size:11px;margin-top:8px">Включите логгер: <code>.dl on</code> в Telegram</p></div>'}
-                </div>
-            </div>
-            <div class="logger-messages">
-                <div class="logger-messages-header">
-                    <h3 id="logger-chat-title">Выберите чат</h3>
-                    <button class="btn btn-sm" onclick="loadLoggerData()">&#128260;</button>
-                </div>
-                <div class="logger-messages-list" id="logger-messages-list">
-                    <div class="logger-empty">&#128065; Выберите чат слева</div>
-                </div>
-            </div>
-        </div>`;
-
-    // Load messages for selected chat
-    if(selectedLoggerChat){
-        await loadLoggerMessages(selectedLoggerChat);
-    }
-}
-
-async function selectLoggerChat(chatId){
-    selectedLoggerChat=chatId;
-    // Update active state
-    document.querySelectorAll('.logger-chat-item').forEach(el=>el.classList.remove('active'));
-    event.currentTarget.classList.add('active');
-    await loadLoggerMessages(chatId);
-}
-
-async function loadLoggerMessages(chatId){
-    const data=await api('GET',`/tabs/deleted_logger?action=chat_messages&chat_id=${encodeURIComponent(chatId)}`);
-    if(!data||!data.success)return;
-
-    const chat=data.chat;
-    const messages=data.messages||[];
-    const titleEl=document.getElementById('logger-chat-title');
-    const listEl=document.getElementById('logger-messages-list');
-    if(!listEl)return;
-
-    if(titleEl) titleEl.textContent=chat?`${chat.title} (${messages.length})`:'Чат не найден';
-
-    if(messages.length===0){
-        listEl.innerHTML='<div class="logger-empty">Нет удалённых сообщений</div>';
-        return;
-    }
-
-    let html='';
-    messages.forEach(msg=>{
-        const text=escapeHtml(msg.text||'(нет текста)');
-        const mediaHtml=msg.has_media?`<div class="logger-msg-media">&#128247; ${escapeHtml(msg.media_type||'медиа')}</div>`:'';
-        const senderHtml=msg.sender_name?`<span class="logger-msg-sender">${escapeHtml(msg.sender_name)}</span>`:'<span class="logger-msg-sender" style="color:var(--text-muted)">Неизвестный</span>';
-        html+=`<div class="logger-msg">
-            <div class="logger-msg-header">
-                ${senderHtml}
-                <span class="logger-msg-date">${escapeHtml(msg.date?msg.date.substring(0,16):'')}</span>
-            </div>
-            <div class="logger-msg-text">${text}</div>
-            ${mediaHtml}
-            <div class="logger-msg-deleted">&#128465; Удалено: ${escapeHtml(msg.deleted_at?msg.deleted_at.substring(0,16):'?')}</div>
-        </div>`;
-    });
-    listEl.innerHTML=html;
+    // Future: add tab-specific refresh logic here
 }
 
 // ── Utility ─────────────────────────────────────────────────

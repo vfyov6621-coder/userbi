@@ -19,9 +19,9 @@ logger = logging.getLogger("userbot.bot")
 # Global reference to the client (needed for script register())
 bot_client = None
 
-BOT_NAME = "Zaya"
+BOT_NAME = "sandusr"
 INFO_FILE = os.path.join(Config.CUSTOM_SCRIPTS_DIR, "bot_info.json")
-PHOTO_FILE = os.path.join(Config.CUSTOM_SCRIPTS_DIR, "bot_photo.jpg")
+PHOTO_FILE = os.path.join(Config.BASE_DIR, "scripts", "bot_photo.jpg")
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -44,12 +44,11 @@ def _is_owner(user_id: int, client: Client) -> bool:
 
 
 # ═══════════════════════════════════════════════════════════════════════
-#  .mm  —  built-in menu
+#  .mm  —  built-in menu (с фото)
 # ═══════════════════════════════════════════════════════════════════════
 
 MM_KEYBOARD = InlineKeyboardMarkup(
     [
-        [InlineKeyboardButton("📷 Фото", callback_data="mm_photo")],
         [InlineKeyboardButton("🏓 Пинг", callback_data="mm_ping")],
         [InlineKeyboardButton("ℹ️ Инфо", callback_data="mm_info")],
         [InlineKeyboardButton("👤 Владелец", callback_data="mm_owner")],
@@ -58,7 +57,7 @@ MM_KEYBOARD = InlineKeyboardMarkup(
 
 
 async def mm_command(client: Client, message: Message):
-    """Show the main menu."""
+    """Show the main menu with photo header."""
     info = _load_info()
     name = info.get("name", BOT_NAME)
     bio = info.get("bio", "")
@@ -68,7 +67,27 @@ async def mm_command(client: Client, message: Message):
         text += f"\n<i>{bio}</i>"
     text += "\n\nВыберите действие:"
 
-    await message.edit(text, reply_markup=MM_KEYBOARD, parse_mode=ParseMode.HTML)
+    # Если есть фото — отправляем с фото
+    if os.path.exists(PHOTO_FILE):
+        try:
+            await message.edit_text(text, reply_markup=MM_KEYBOARD, parse_mode=ParseMode.HTML)
+            # Отправляем фото отдельным сообщением (edited message не может стать photo)
+            # Но лучше: удаляем текст и отправляем фото + caption
+            await message.delete()
+            await client.send_photo(
+                chat_id=message.chat.id,
+                photo=PHOTO_FILE,
+                caption=text,
+                reply_markup=MM_KEYBOARD,
+                parse_mode=ParseMode.HTML,
+                reply_to_message_id=message.reply_to_message_id if message.reply_to_message else None,
+            )
+        except Exception as e:
+            # Если не удалось с фото — fallback на текст
+            logger.warning(f"Could not send .mm with photo: {e}")
+            await message.edit_text(text, reply_markup=MM_KEYBOARD, parse_mode=ParseMode.HTML)
+    else:
+        await message.edit_text(text, reply_markup=MM_KEYBOARD, parse_mode=ParseMode.HTML)
 
 
 async def mm_callback(client: Client, callback: CallbackQuery):
@@ -76,20 +95,7 @@ async def mm_callback(client: Client, callback: CallbackQuery):
     data = callback.data
     from_user_id = callback.from_user.id
 
-    if data == "mm_photo":
-        if os.path.exists(PHOTO_FILE):
-            try:
-                await callback.message.reply_photo(PHOTO_FILE, caption="📷 Фото")
-                await callback.answer("Фото отправлено!", show_alert=False)
-            except Exception as e:
-                await callback.answer(f"Ошибка: {e}", show_alert=True)
-        else:
-            await callback.answer(
-                "Файл bot_photo.jpg не найден.\nПоложите фото в scripts_custom/bot_photo.jpg",
-                show_alert=True,
-            )
-
-    elif data == "mm_ping":
+    if data == "mm_ping":
         start = time.time()
         msg = await callback.message.edit_text("🏓 Пинг...")
         end = time.time()
@@ -169,8 +175,6 @@ async def mf_command(client: Client, message: Message):
     await message.edit_text("📸 Сохранение фото...", parse_mode=ParseMode.HTML)
 
     try:
-        os.makedirs(os.path.dirname(PHOTO_FILE), exist_ok=True)
-
         if reply.photo:
             file = await client.download_media(reply.photo.file_id, file_name=PHOTO_FILE)
         else:
@@ -178,8 +182,7 @@ async def mf_command(client: Client, message: Message):
 
         if file:
             await message.edit_text(
-                "✅ Фото установлено!\n\n"
-                "Теперь <code>.mm</code> → 📷 Фото отправит это изображение.",
+                "✅ Фото установлено!\n\nТеперь <code>.mm</code> покажет это фото.",
                 parse_mode=ParseMode.HTML,
             )
         else:

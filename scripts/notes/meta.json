@@ -1,7 +1,7 @@
 {
   "name": "Notes",
   "version": "1.0",
-  "author": "Zaya",
+  "author": "sandusr",
   "description": "Быстрые заметки в Telegram",
   "command": ".note",
   "addons": [],
