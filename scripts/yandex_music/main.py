@@ -9,11 +9,17 @@ Yandex Music - "Сейчас слушает"
   .np token XXX  — установить OAuth токен
 
 Как получить OAuth токен:
-  1. Открой в браузере:
+  1. Зайди в Яндекс (mail.yandex.ru) и авторизуйся
+  2. Открой ЭТУ ссылку в ТОМ ЖЕ браузере:
      https://oauth.yandex.ru/authorize?response_type=token&client_id=23cabbbdc6cd418abb4b39c32c41185d
-  2. Нажми "Разрешить"
-  3. В адресной строке будет token=XXXXX — скопируй XXXXX
-  4. .np token XXXXX
+  3. Нажми "Разрешить"
+  4. Браузер перейдёт на страницу, в адресной строке:
+     ...verification_code#access_token=XXXXX&...
+  5. Скопируй только XXXXX (без &...)
+  6. .np token XXXXX
+
+ВАЖНО: Если видишь ошибку 400 — ты не залогинен в Яндекс!
+  Сначала зайди на mail.yandex.ru, потом открывай ссылку.
 
 Токен привязан к аккаунту, работает со всех устройств (телефон, десктоп, браузер).
 """
@@ -299,11 +305,13 @@ def register(client):
             if not token:
                 await message.edit_text(
                     "❌ Токен не установлен!\n\n"
-                    "1. Открой в браузере:\n"
+                    "1. Зайди на <b>mail.yandex.ru</b> (авторизуйся!)\n"
+                    "2. Открой в том же браузере:\n"
                     "<code>https://oauth.yandex.ru/authorize?response_type=token&client_id=23cabbbdc6cd418abb4b39c32c41185d</code>\n"
-                    "2. Нажми <b>Разрешить</b>\n"
-                    "3. В адресной строке скопируй <b>token=XXXXX</b>\n"
-                    "4. <code>.np token XXXXX</code>",
+                    "3. Нажми <b>Разрешить</b>\n"
+                    "4. В адресной строке: <b>access_token=XXXXX</b>\n"
+                    "5. <code>.np token XXXXX</code>\n\n"
+                    "Ошибка 400? Ты не залогинен в Яндекс!",
                     parse_mode=ParseMode.HTML,
                     disable_web_page_preview=True,
                 )
@@ -370,11 +378,13 @@ def register(client):
         if not token:
             await message.edit_text(
                 "❌ Токен не установлен!\n\n"
-                "1. Открой в браузере:\n"
+                "1. Зайди на <b>mail.yandex.ru</b> (авторизуйся!)\n"
+                "2. Открой в том же браузере:\n"
                 "<code>https://oauth.yandex.ru/authorize?response_type=token&client_id=23cabbbdc6cd418abb4b39c32c41185d</code>\n"
-                "2. Нажми <b>Разрешить</b>\n"
-                "3. В адресной строке скопируй <b>token=XXXXX</b>\n"
-                "4. <code>.np token XXXXX</code>",
+                "3. Нажми <b>Разрешить</b>\n"
+                "4. В адресной строке: <b>access_token=XXXXX</b>\n"
+                "5. <code>.np token XXXXX</code>\n\n"
+                "Ошибка 400? Ты не залогинен в Яндекс!",
                 parse_mode=ParseMode.HTML,
                 disable_web_page_preview=True,
             )
