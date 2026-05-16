@@ -1,0 +1,9 @@
+{
+  "name": "Action Logger",
+  "version": "1.0",
+  "author": "sandusr",
+  "description": "Логирует команды юзербота и отслеживает неработающие",
+  "command": ".al",
+  "addons": [],
+  "tabs": []
+}
