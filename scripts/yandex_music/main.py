@@ -3,23 +3,24 @@ Yandex Music - "Сейчас слушает"
 Показывает текущий трек из Яндекс Музыки с обложкой и ссылкой.
 
 Команды:
-  .np          - показать текущий трек
-  .np auto     - автоматически обновлять каждые 30 сек
-  .np stop     - остановить автообновление
-  .np token XXX - установить sessar токен
+  .np            — показать текущий трек
+  .np auto       — автоматически обновлять каждые 30 сек
+  .np stop       — остановить автообновление
+  .np token XXX  — установить OAuth токен
 
-Как получить токен:
-  F12 -> Network -> включи трек -> кликни на запрос к api.music.yandex.ru
-  -> Headers -> Request Headers -> Cookie -> найди sessar=XXX
-  Или: правый клик на запрос -> Copy as cURL -> найди sessar=
+Как получить OAuth токен:
+  1. Открой в браузере:
+     https://oauth.yandex.ru/authorize?response_type=token&client_id=23cabbbdc6cd418abb4b39c32c41185d
+  2. Нажми "Разрешить"
+  3. В адресной строке будет token=XXXXX — скопируй XXXXX
+  4. .np token XXXXX
+
+Токен привязан к аккаунту, работает со всех устройств (телефон, десктоп, браузер).
 """
 
 import os
-import json
 import asyncio
 import logging
-import urllib.request
-import urllib.error
 import tempfile
 
 from pyrogram import filters
@@ -28,7 +29,6 @@ from pyrogram.types import Message
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 TOKEN_FILE = os.path.join(SCRIPT_DIR, "token.txt")
-API_BASE = "https://api.music.yandex.net"
 
 logger = logging.getLogger("userbot.yandex_music")
 
@@ -57,94 +57,82 @@ def _save_token(token):
         f.write(token.strip())
 
 
-def _api_get(path, token, timeout=10):
-    """GET запрос к API Яндекс Музыки через sessar cookie."""
-    url = f"{API_BASE}{path}"
-    req = urllib.request.Request(url, headers={
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        "Accept": "application/json",
-        "Cookie": f"sessar={token}",
-        "Origin": "https://music.yandex.ru",
-        "Referer": "https://music.yandex.ru/",
-        "X-Yandex-Music-Client": "YandexMusicWebNext/1.0.0",
-    })
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        return json.loads(resp.read().decode("utf-8"))
-
-
-async def _get_current_track(token):
-    """Получить текущий играющий трек. Пробуем несколько эндпоинтов."""
-    loop = asyncio.get_event_loop()
-
-    # Метод 1: /queues
+def _get_current_track(token):
+    """Получить текущий играющий трек через библиотеку yandex-music."""
     try:
-        queues_data = await loop.run_in_executor(
-            None, _api_get, "/queues", token
-        )
-        queues = queues_data.get("queues", [])
-        if queues:
-            queue_id = queues[0].get("id", "")
-            if queue_id:
-                queue_data = await loop.run_in_executor(
-                    None, _api_get, f"/queues/{queue_id}", token
-                )
-                tracks = queue_data.get("tracks", [])
-                current_idx = queue_data.get("currentPlayingIndex", -1)
-                if tracks and 0 <= current_idx < len(tracks):
-                    track = tracks[current_idx].get("track", {})
-                    if track:
-                        return track
-    except urllib.error.HTTPError as e:
-        logger.error(f"Yandex Music API error: {e.code}")
-    except Exception as e:
-        logger.debug(f"Queues method failed: {e}")
+        from yandex_music import Client
+        loop = asyncio.get_event_loop()
 
-    # Метод 2: /player/queue
-    try:
-        player_data = await loop.run_in_executor(
-            None, _api_get, "/player/queue", token
-        )
-        if player_data:
-            queue = player_data.get("queue", {})
-            tracks = queue.get("tracks", []) if queue else []
-            current_idx = player_data.get("currentIndex", -1)
-            if tracks and 0 <= current_idx < len(tracks):
-                track = tracks[current_idx].get("track", {})
-                if track:
-                    return track
-    except Exception as e:
-        logger.debug(f"Player method failed: {e}")
+        def _fetch():
+            client = Client(token).init()
+            # Получаем список очередей
+            queues = client.queues_list()
+            if not queues:
+                return None
 
-    return None
+            # Берём первую очередь (текущую)
+            queue_id = queues[0].id
+            if not queue_id:
+                return None
+
+            # Получаем треки из очереди
+            queue = client.queue(queue_id)
+            if not queue:
+                return None
+
+            tracks = queue.tracks
+            if not tracks:
+                return None
+
+            # Определяем индекс текущего трека
+            current_idx = getattr(queue, 'current_index', 0)
+            if current_idx < 0 or current_idx >= len(tracks):
+                return None
+
+            item = tracks[current_idx]
+            track = getattr(item, 'track', item)
+            if not track:
+                return None
+
+            return track
+
+        return loop.run_in_executor(None, _fetch)
+
+    except Exception as e:
+        logger.error(f"Yandex Music API error: {e}")
+        return None
 
 
 def _build_message(track):
     """Построить текст из данных трека. Возвращает (text, cover_url, track_id)."""
     artists = []
-    for a in track.get("artists", []):
-        name = a.get("name", "")
+    for a in track.artists or []:
+        name = getattr(a, 'name', '')
         if name:
             artists.append(name)
     artist_str = ", ".join(artists) if artists else "Неизвестный артист"
 
-    title = track.get("title", "Неизвестный трек")
-    version = track.get("version", "")
+    title = getattr(track, 'title', 'Неизвестный трек') or 'Неизвестный трек'
+    version = getattr(track, 'version', '')
     if version:
         title += f" ({version})"
 
-    album_title = track.get("album", {}).get("title", "")
-    album_id = track.get("album", {}).get("id", "")
-    track_id = track.get("id", "")
+    album = getattr(track, 'albums', [])
+    album_title = album[0].title if album and hasattr(album[0], 'title') else ''
+    album_id = album[0].id if album and hasattr(album[0], 'id') else ''
+    track_id = getattr(track, 'id', '')
 
     if album_id and track_id:
         link = f"https://music.yandex.ru/album/{album_id}/track/{track_id}"
     else:
         link = "https://music.yandex.ru"
 
-    cover_uri = track.get("album", {}).get("coverUri", "")
+    # Обложка
     cover_url = None
-    if cover_uri:
-        cover_url = f"https://{cover_uri.replace('%%', '300x300')}"
+    if album and hasattr(album[0], 'cover_uri') and album[0].cover_uri:
+        cover_url = album[0].cover_uri.replace("%%", "300x300")
+        if not cover_url.startswith("https://"):
+            cover_url = "https://" + cover_url
 
     text = f"🎵 <b>{artist_str} — {title}</b>"
     if album_title:
@@ -155,6 +143,7 @@ def _build_message(track):
 
 
 def _download_file(url, path):
+    import urllib.request
     req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
     with urllib.request.urlopen(req, timeout=10) as resp:
         with open(path, "wb") as f:
@@ -163,12 +152,17 @@ def _download_file(url, path):
 
 async def _send_now_playing(client, message, token):
     """Отправить текущий трек с обложкой."""
-    track = await _get_current_track(token)
+    await message.edit_text("🎵 Загрузка...", parse_mode=ParseMode.HTML)
+
+    track_future = _get_current_track(token)
+    track = await track_future if asyncio.isfuture(track_future) else track_future
 
     if not track:
         await message.edit_text(
             "🔇 <b>Сейчас ничего не играет</b>\n\n"
-            "Включи трек в Яндекс Музыке и попробуй снова.",
+            "Включи трек в Яндекс Музыке и попробуй снова.\n\n"
+            "Убедись что OAuth токен правильный.\n"
+            "Если токен устарел — получи новый.",
             parse_mode=ParseMode.HTML,
         )
         return
@@ -212,7 +206,9 @@ async def _update_now_playing(client, token):
         return
 
     chat_id, msg_id = _last_msg
-    track = await _get_current_track(token)
+
+    track_future = _get_current_track(token)
+    track = await track_future if asyncio.isfuture(track_future) else track_future
 
     if not track:
         if not _no_music_shown:
@@ -228,7 +224,7 @@ async def _update_now_playing(client, token):
                 pass
         return
 
-    track_id = track.get("id", "")
+    track_id = getattr(track, 'id', '')
     if track_id == _last_track_id:
         return
 
@@ -303,13 +299,11 @@ def register(client):
             if not token:
                 await message.edit_text(
                     "❌ Токен не установлен!\n\n"
-                    "1. Открой <a href='https://music.yandex.ru'>music.yandex.ru</a>\n"
-                    "2. F12 → вкладка <b>Network</b>\n"
-                    "3. Включи трек\n"
-                    "4. Кликни на запрос к <code>api.music.yandex.net</code>\n"
-                    "5. Найди <b>Cookie</b> → <code>sessar=XXX</code>\n"
-                    "6. Скопируй XXX\n\n"
-                    "<code>.np token XXX</code>",
+                    "1. Открой в браузере:\n"
+                    "<code>https://oauth.yandex.ru/authorize?response_type=token&client_id=23cabbbdc6cd418abb4b39c32c41185d</code>\n"
+                    "2. Нажми <b>Разрешить</b>\n"
+                    "3. В адресной строке скопируй <b>token=XXXXX</b>\n"
+                    "4. <code>.np token XXXXX</code>",
                     parse_mode=ParseMode.HTML,
                     disable_web_page_preview=True,
                 )
@@ -325,7 +319,11 @@ def register(client):
             if _auto_task:
                 _auto_task.cancel()
 
-            track = await _get_current_track(token)
+            await message.edit_text("🎵 Проверяю...", parse_mode=ParseMode.HTML)
+
+            track_future = _get_current_track(token)
+            track = await track_future if asyncio.isfuture(track_future) else track_future
+
             if not track:
                 await message.edit_text(
                     "🔇 Сейчас ничего не играет.\nВключи трек и попробуй снова.",
@@ -372,13 +370,11 @@ def register(client):
         if not token:
             await message.edit_text(
                 "❌ Токен не установлен!\n\n"
-                "1. Открой <a href='https://music.yandex.ru'>music.yandex.ru</a>\n"
-                "2. F12 → вкладка <b>Network</b>\n"
-                "3. Включи трек\n"
-                "4. Кликни на запрос к <code>api.music.yandex.net</code>\n"
-                "5. Найди <b>Cookie</b> → <code>sessar=XXX</code>\n"
-                "6. Скопируй XXX\n\n"
-                "<code>.np token XXX</code>",
+                "1. Открой в браузере:\n"
+                "<code>https://oauth.yandex.ru/authorize?response_type=token&client_id=23cabbbdc6cd418abb4b39c32c41185d</code>\n"
+                "2. Нажми <b>Разрешить</b>\n"
+                "3. В адресной строке скопируй <b>token=XXXXX</b>\n"
+                "4. <code>.np token XXXXX</code>",
                 parse_mode=ParseMode.HTML,
                 disable_web_page_preview=True,
             )
