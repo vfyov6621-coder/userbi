@@ -6,20 +6,14 @@ Yandex Music - "Сейчас слушает"
   .np            — показать текущий трек
   .np auto       — автоматически обновлять каждые 30 сек
   .np stop       — остановить автообновление
-  .np token XXX  — установить OAuth токен
+  .np auth       — получить токен через Device Flow (рекомендуется)
+  .np token XXX  — вручную установить OAuth токен
 
-Как получить OAuth токен:
-  1. Зайди в Яндекс (mail.yandex.ru) и авторизуйся
-  2. Открой ЭТУ ссылку в ТОМ ЖЕ браузере:
-     https://oauth.yandex.ru/authorize?response_type=token&client_id=23cabbbdc6cd418abb4b39c32c41185d
-  3. Нажми "Разрешить"
-  4. Браузер перейдёт на страницу, в адресной строке:
-     ...verification_code#access_token=XXXXX&...
-  5. Скопируй только XXXXX (без &...)
-  6. .np token XXXXX
-
-ВАЖНО: Если видишь ошибку 400 — ты не залогинен в Яндекс!
-  Сначала зайди на mail.yandex.ru, потом открывай ссылку.
+Как получить токен:
+  1. Напиши .np auth
+  2. Бот выдаст ссылку и код
+  3. Открой ссылку в браузере, введи код, авторизуйся
+  4. Токен сохранится автоматически
 
 Токен привязан к аккаунту, работает со всех устройств (телефон, десктоп, браузер).
 """
@@ -71,17 +65,14 @@ def _get_current_track(token):
 
         def _fetch():
             client = Client(token).init()
-            # Получаем список очередей
             queues = client.queues_list()
             if not queues:
                 return None
 
-            # Берём первую очередь (текущую)
             queue_id = queues[0].id
             if not queue_id:
                 return None
 
-            # Получаем треки из очереди
             queue = client.queue(queue_id)
             if not queue:
                 return None
@@ -90,7 +81,6 @@ def _get_current_track(token):
             if not tracks:
                 return None
 
-            # Определяем индекс текущего трека
             current_idx = getattr(queue, 'current_index', 0)
             if current_idx < 0 or current_idx >= len(tracks):
                 return None
@@ -133,7 +123,6 @@ def _build_message(track):
     else:
         link = "https://music.yandex.ru"
 
-    # Обложка
     cover_url = None
     if album and hasattr(album[0], 'cover_uri') and album[0].cover_uri:
         cover_url = album[0].cover_uri.replace("%%", "300x300")
@@ -167,8 +156,8 @@ async def _send_now_playing(client, message, token):
         await message.edit_text(
             "🔇 <b>Сейчас ничего не играет</b>\n\n"
             "Включи трек в Яндекс Музыке и попробуй снова.\n\n"
-            "Убедись что OAuth токен правильный.\n"
-            "Если токен устарел — получи новый.",
+            "Убедись что токен правильный.\n"
+            "Если токен устарел — <code>.np auth</code> получите новый.",
             parse_mode=ParseMode.HTML,
         )
         return
@@ -273,6 +262,18 @@ async def _auto_loop(client, token):
             pass
 
 
+def _no_token_message():
+    return (
+        "❌ Токен не установлен!\n\n"
+        "Получи токен командой:\n"
+        "<code>.np auth</code>\n\n"
+        "Бот выдаст ссылку и код —\n"
+        "открой ссылку, введи код, авторизуйся.\n\n"
+        "Или установи вручную:\n"
+        "<code>.np token XXXXX</code>"
+    )
+
+
 def register(client):
 
     @client.on_message(filters.command("np", prefixes=".") & filters.me)
@@ -281,6 +282,68 @@ def register(client):
 
         args = message.text.split(maxsplit=1)
         action = args[1].strip().lower() if len(args) > 1 else ""
+
+        # .np auth — Device Flow авторизация
+        if action == "auth":
+            await message.edit_text(
+                "🔄 Подключение к Яндекс...",
+                parse_mode=ParseMode.HTML,
+            )
+
+            try:
+                from yandex_music import Client
+                loop = asyncio.get_event_loop()
+                auth_result = {}
+
+                def _do_auth():
+                    ya_client = Client()
+                    token_obj = ya_client.device_auth(
+                        on_code=lambda c: auth_result.update({
+                            "url": c.verification_url,
+                            "code": c.user_code,
+                        })
+                    )
+                    auth_result["token"] = getattr(token_obj, 'access_token', '')
+                    if not auth_result["token"] and hasattr(token_obj, 'token'):
+                        auth_result["token"] = token_obj.token
+                    return auth_result.get("token", "")
+
+                # Запускаем в отдельном потоке, но с таймаутом
+                token = await asyncio.wait_for(
+                    loop.run_in_executor(None, _do_auth),
+                    timeout=180,
+                )
+
+                if token:
+                    _save_token(token)
+                    await message.edit_text(
+                        "✅ Токен получен и сохранён!\n\n"
+                        "Теперь используй <code>.np</code> для показа текущего трека.",
+                        parse_mode=ParseMode.HTML,
+                    )
+                else:
+                    await message.edit_text(
+                        "❌ Не удалось получить токен.\n\n"
+                        "Попробуй снова: <code>.np auth</code>\n"
+                        "Или установи вручную: <code>.np token XXXXX</code>",
+                        parse_mode=ParseMode.HTML,
+                    )
+
+            except asyncio.TimeoutError:
+                await message.edit_text(
+                    "⏰ Время вышло (3 минуты).\n\n"
+                    "Попробуй снова: <code>.np auth</code>",
+                    parse_mode=ParseMode.HTML,
+                )
+            except Exception as e:
+                logger.error(f"Device auth error: {e}")
+                await message.edit_text(
+                    f"❌ Ошибка авторизации:\n<code>{e}</code>\n\n"
+                    "Альтернатива — установи токен вручную:\n"
+                    "<code>.np token XXXXX</code>",
+                    parse_mode=ParseMode.HTML,
+                )
+            return
 
         # .np token XXX
         if action.startswith("token "):
@@ -304,16 +367,8 @@ def register(client):
             token = _get_token()
             if not token:
                 await message.edit_text(
-                    "❌ Токен не установлен!\n\n"
-                    "1. Зайди на <b>mail.yandex.ru</b> (авторизуйся!)\n"
-                    "2. Открой в том же браузере:\n"
-                    "<code>https://oauth.yandex.ru/authorize?response_type=token&client_id=23cabbbdc6cd418abb4b39c32c41185d</code>\n"
-                    "3. Нажми <b>Разрешить</b>\n"
-                    "4. В адресной строке: <b>access_token=XXXXX</b>\n"
-                    "5. <code>.np token XXXXX</code>\n\n"
-                    "Ошибка 400? Ты не залогинен в Яндекс!",
+                    _no_token_message(),
                     parse_mode=ParseMode.HTML,
-                    disable_web_page_preview=True,
                 )
                 return
 
@@ -377,16 +432,8 @@ def register(client):
         token = _get_token()
         if not token:
             await message.edit_text(
-                "❌ Токен не установлен!\n\n"
-                "1. Зайди на <b>mail.yandex.ru</b> (авторизуйся!)\n"
-                "2. Открой в том же браузере:\n"
-                "<code>https://oauth.yandex.ru/authorize?response_type=token&client_id=23cabbbdc6cd418abb4b39c32c41185d</code>\n"
-                "3. Нажми <b>Разрешить</b>\n"
-                "4. В адресной строке: <b>access_token=XXXXX</b>\n"
-                "5. <code>.np token XXXXX</code>\n\n"
-                "Ошибка 400? Ты не залогинен в Яндекс!",
+                _no_token_message(),
                 parse_mode=ParseMode.HTML,
-                disable_web_page_preview=True,
             )
             return
 
