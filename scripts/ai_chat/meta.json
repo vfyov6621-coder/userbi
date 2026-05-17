@@ -1,0 +1,9 @@
+{
+  "name": "AI Chat",
+  "version": "1.0",
+  "author": "sandusr",
+  "description": "Локальный AI ассистент через Ollama (без цензуры)",
+  "command": ".ai",
+  "addons": [],
+  "tabs": []
+}
