@@ -378,6 +378,12 @@ class ScriptLoader:
 
     def auto_load_all(self, client=None):
         scripts = Config.get_auto_start()
+
+        # Если auto_start.json нет (None) — грузим ВСЕ доступные скрипты
+        if scripts is None:
+            scripts = self.get_available_scripts()
+            logger.info(f"No auto_start.json found, loading all {len(scripts)} scripts")
+
         loaded, failed = [], []
         for item in scripts:
             result = self.load_script(item, client)

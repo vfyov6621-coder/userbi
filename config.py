@@ -57,7 +57,8 @@ class Config:
 
     @classmethod
     def get_auto_start(cls) -> list:
-        """Return the list of script IDs that should auto-load on startup."""
+        """Return the list of script IDs that should auto-load on startup.
+        If no auto_start.json exists, loads ALL available scripts."""
         try:
             if os.path.exists(cls.AUTO_START_FILE):
                 with open(cls.AUTO_START_FILE, "r", encoding="utf-8") as f:
@@ -66,12 +67,17 @@ class Config:
                     return [s for s in data if isinstance(s, str)]
         except Exception:
             pass
-        return []
+        # Нет auto_start.json — вернём None (загрузить всё)
+        return None
 
     @classmethod
     def set_auto_start(cls, script_id: str, enabled: bool) -> bool:
         """Add or remove a script from the auto-start list."""
         scripts = cls.get_auto_start()
+        if scripts is None:
+            # Первый раз создаём список со всеми текущими скриптами
+            from loader import ScriptLoader
+            scripts = ScriptLoader().get_available_scripts()
         if enabled and script_id not in scripts:
             scripts.append(script_id)
         elif not enabled and script_id in scripts:
