@@ -172,6 +172,18 @@ def _truncate_text(text: str, max_len: int = 4096) -> str:
     return text[:max_len - 20] + "\n\n[...] сообщение обрезано"
 
 
+async def _safe_edit(message, text, **kwargs):
+    """edit_text с fallback на reply, если нет прав."""
+    try:
+        return await message.edit_text(text, **kwargs)
+    except Exception:
+        try:
+            return await message.reply(text, quote=True)
+        except Exception:
+            pass
+    return None
+
+
 def register(client):
 
     @client.on_message(filters.command("ai", prefixes=".") & filters.me)
@@ -189,7 +201,8 @@ def register(client):
         if action == "on":
             _chat_enabled = True
             _load_history()
-            await message.edit_text(
+            await _safe_edit(
+                message,
                 "🟢 <b>AI режим включён</b>\n\n"
                 f"Модель: <code>{model}</code>\n"
                 "Теперь я отвечу на все твои сообщения.\n\n"
@@ -202,21 +215,22 @@ def register(client):
         # .ai off — выключить режим диалога
         if action == "off":
             _chat_enabled = False
-            await message.edit_text("🔴 AI режим выключен", parse_mode=ParseMode.HTML)
+            await _safe_edit(message, "🔴 AI режим выключен", parse_mode=ParseMode.HTML)
             return
 
         # .ai clear — очистить историю
         if action == "clear":
             _conversation_history = []
             _save_history()
-            await message.edit_text("🗑 История диалога очищена", parse_mode=ParseMode.HTML)
+            await _safe_edit(message, "🗑 История диалога очищена", parse_mode=ParseMode.HTML)
             return
 
         # .ai model <name> — сменить модель
         if action.startswith("model "):
             new_model = action[6:].strip()
             if not new_model:
-                await message.edit_text(
+                await _safe_edit(
+                    message,
                     f"Текущая модель: <code>{model}</code>\n\n"
                     "Сменить: <code>.ai model qwen2.5:3b</code>",
                     parse_mode=ParseMode.HTML,
@@ -225,7 +239,8 @@ def register(client):
 
             settings["model"] = new_model
             _save_settings(settings)
-            await message.edit_text(
+            await _safe_edit(
+                message,
                 f"✅ Модель изменена на: <code>{new_model}</code>\n\n"
                 "Убедись что она скачана:\n"
                 f"<code>ollama pull {new_model}</code>",
@@ -238,7 +253,8 @@ def register(client):
             available, models = await _check_ollama()
             if available:
                 models_str = "\n".join(f"  • <code>{m}</code>" for m in models[:10])
-                await message.edit_text(
+                await _safe_edit(
+                    message,
                     f"🟢 <b>Ollama работает</b>\n\n"
                     f"Текущая модель: <code>{model}</code>\n"
                     f"URL: <code>{OLLAMA_URL}</code>\n\n"
@@ -246,7 +262,8 @@ def register(client):
                     parse_mode=ParseMode.HTML,
                 )
             else:
-                await message.edit_text(
+                await _safe_edit(
+                    message,
                     "🔴 <b>Ollama не запущена</b>\n\n"
                     "Установи: https://ollama.com/download\n\n"
                     "После установки:\n"
@@ -260,7 +277,8 @@ def register(client):
         if action.startswith("sys "):
             new_sys = args[1][4:].strip()
             if not new_sys:
-                await message.edit_text(
+                await _safe_edit(
+                    message,
                     f"Текущий системный промпт:\n\n<i>{system}</i>\n\n"
                     "Изменить: <code>.ai sys Ты весёлый бот</code>",
                     parse_mode=ParseMode.HTML,
@@ -268,7 +286,8 @@ def register(client):
                 return
             settings["system"] = new_sys
             _save_settings(settings)
-            await message.edit_text(
+            await _safe_edit(
+                message,
                 "✅ Системный промпт обновлён:\n\n"
                 f"<i>{new_sys[:200]}</i>",
                 parse_mode=ParseMode.HTML,
@@ -277,7 +296,8 @@ def register(client):
 
         # .ai <текст> — задать вопрос
         if not action:
-            await message.edit_text(
+            await _safe_edit(
+                message,
                 "<b>🤖 AI Chat — локальный ассистент</b>\n\n"
                 "<code>.ai <текст></code> — задать вопрос\n"
                 "<code>.ai on/off</code> — режим диалога\n"
@@ -291,7 +311,14 @@ def register(client):
 
         # Отправляем вопрос
         question = args[1].strip()
-        await message.edit_text("🤔 Думаю...", parse_mode=ParseMode.HTML)
+
+        # Пробуем edit, если нет прав — reply
+        thinking_msg = None
+        try:
+            await message.edit_text("🤔 Думаю...", parse_mode=ParseMode.HTML)
+            thinking_msg = message
+        except Exception:
+            thinking_msg = await message.reply("🤔 Думаю...", quote=True)
 
         # Загружаем историю
         _load_history()
@@ -306,14 +333,16 @@ def register(client):
         # Отправляем ответ
         answer = _truncate_text(answer)
         try:
-            await message.edit_text(
-                f"🤖 <b>{answer}</b>",
+            await thinking_msg.edit_text(
+                answer,
                 parse_mode=ParseMode.HTML,
                 disable_web_page_preview=True,
             )
         except Exception:
-            # Если edit не работает (слишком длинный или старое сообщение)
-            await message.edit_text(answer[:1000], parse_mode=ParseMode.HTML)
+            try:
+                await thinking_msg.edit_text(answer[:1000])
+            except Exception:
+                pass
 
     @client.on_message(filters.me & ~filters.command(["ai"], prefixes="."))
     async def ai_chat_responder(client, message: Message):
@@ -337,7 +366,7 @@ def register(client):
         system = settings.get("system", DEFAULT_SYSTEM)
 
         # Показываем что думаем
-        thinking = await message.reply("🤔", quote=True)
+        thinking = await message.reply("🤔 Думаю...", quote=True)
 
         _load_history()
         answer = await _ask_ollama(text, model, system, _conversation_history)
@@ -355,7 +384,7 @@ def register(client):
             )
         except Exception:
             try:
-                await thinking.edit_text(answer[:1000])
+                await thinking.reply(answer, quote=False)
             except Exception:
                 pass
 
