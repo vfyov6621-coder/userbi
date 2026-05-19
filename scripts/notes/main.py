@@ -2,7 +2,9 @@
 Quick notes in Telegram. .note save/get/list/del/set, .n <name>
 """
 
-import os
+import sys, os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from scripts._utils import safe_edit
 import json
 
 NOTES_FILE = os.path.join(
@@ -37,7 +39,7 @@ def register(client):
     async def note_handler(client, message: Message):
         args = message.text.split(maxsplit=2)
         if len(args) < 2:
-            await message.edit_text(
+            await safe_edit(message,
                 "<b>📝 Заметки</b>\n\n"
                 "<code>.note save &lt;имя&gt; &lt;текст&gt;</code>\n"
                 "<code>.note set &lt;имя&gt;</code> (ответ на соо)\n"
@@ -54,7 +56,7 @@ def register(client):
         if action == "list":
             notes = _load()
             if not notes:
-                await message.edit_text(
+                await safe_edit(message,
                     "📝 Заметок нет.\n\n<code>.note save имя текст</code>",
                     parse_mode=ParseMode.HTML,
                 )
@@ -62,7 +64,7 @@ def register(client):
             lines = "\n".join(
                 f"  {i}. <code>{k}</code>" for i, k in enumerate(sorted(notes.keys()), 1)
             )
-            await message.edit_text(
+            await safe_edit(message,
                 f"📝 <b>Заметки ({len(notes)}):</b>\n\n{lines}",
                 parse_mode=ParseMode.HTML,
             )
@@ -70,71 +72,71 @@ def register(client):
 
         if action == "del":
             if len(args) < 3:
-                await message.edit_text("❌ <code>.note del &lt;имя&gt;</code>", parse_mode=ParseMode.HTML)
+                await safe_edit(message, "❌ <code>.note del &lt;имя&gt;</code>", parse_mode=ParseMode.HTML)
                 return
             name = args[2].strip()
             notes = _load()
             if name in notes:
                 del notes[name]
                 _save(notes)
-                await message.edit_text(f"✅ Заметка <b>{name}</b> удалена", parse_mode=ParseMode.HTML)
+                await safe_edit(message, f"✅ Заметка <b>{name}</b> удалена", parse_mode=ParseMode.HTML)
             else:
-                await message.edit_text(f"❌ Заметка <b>{name}</b> не найдена", parse_mode=ParseMode.HTML)
+                await safe_edit(message, f"❌ Заметка <b>{name}</b> не найдена", parse_mode=ParseMode.HTML)
             return
 
         if action == "get":
             if len(args) < 3:
-                await message.edit_text("❌ <code>.note get &lt;имя&gt;</code>", parse_mode=ParseMode.HTML)
+                await safe_edit(message, "❌ <code>.note get &lt;имя&gt;</code>", parse_mode=ParseMode.HTML)
                 return
             name = args[2].strip()
             notes = _load()
             if name in notes:
                 text = notes[name]
-                await message.edit_text(
+                await safe_edit(message,
                     f"📝 <b>{name}:</b>\n\n{text}",
                     parse_mode=ParseMode.HTML,
                 )
             else:
-                await message.edit_text(f"❌ Заметка <b>{name}</b> не найдена", parse_mode=ParseMode.HTML)
+                await safe_edit(message, f"❌ Заметка <b>{name}</b> не найдена", parse_mode=ParseMode.HTML)
             return
 
         if action == "set":
             if len(args) < 3:
-                await message.edit_text("❌ <code>.note set &lt;имя&gt;</code> (ответ на соо)", parse_mode=ParseMode.HTML)
+                await safe_edit(message, "❌ <code>.note set &lt;имя&gt;</code> (ответ на соо)", parse_mode=ParseMode.HTML)
                 return
             name = args[2].strip()
             reply = message.reply_to_message
             if not reply:
-                await message.edit_text("❌ Ответьте на сообщение", parse_mode=ParseMode.HTML)
+                await safe_edit(message, "❌ Ответьте на сообщение", parse_mode=ParseMode.HTML)
                 return
             text = reply.text or reply.caption or ""
             if not text:
-                await message.edit_text("❌ Нет текста в ответе", parse_mode=ParseMode.HTML)
+                await safe_edit(message, "❌ Нет текста в ответе", parse_mode=ParseMode.HTML)
                 return
             notes = _load()
             notes[name] = text
             _save(notes)
-            await message.edit_text(f"✅ Заметка <b>{name}</b> сохранена", parse_mode=ParseMode.HTML)
+            await safe_edit(message, f"✅ Заметка <b>{name}</b> сохранена", parse_mode=ParseMode.HTML)
             return
 
         if action == "save":
             if len(args) < 3:
-                await message.edit_text("❌ <code>.note save &lt;имя&gt; &lt;текст&gt;</code>", parse_mode=ParseMode.HTML)
+                await safe_edit(message, "❌ <code>.note save &lt;имя&gt; &lt;текст&gt;</code>", parse_mode=ParseMode.HTML)
                 return
             rest = args[2].strip()
             parts = rest.split(maxsplit=1)
             name = parts[0]
             text = parts[1] if len(parts) > 1 else ""
             if not text:
-                await message.edit_text("❌ Укажите текст", parse_mode=ParseMode.HTML)
+                await safe_edit(message, "❌ Укажите текст", parse_mode=ParseMode.HTML)
                 return
             notes = _load()
             notes[name] = text
             _save(notes)
-            await message.edit_text(f"✅ Заметка <b>{name}</b> сохранена", parse_mode=ParseMode.HTML)
+            await safe_edit(message, f"✅ Заметка <b>{name}</b> сохранена", parse_mode=ParseMode.HTML)
             return
 
-        await message.edit_text("❌ Неизвестное действие. .note для справки", parse_mode=ParseMode.HTML)
+        await safe_edit(message, "❌ Неизвестное действие. .note для справки", parse_mode=ParseMode.HTML)
 
     @client.on_message(filters.command("n", prefixes=".") & filters.me)
     async def n_shortcut(client, message: Message):
@@ -144,12 +146,12 @@ def register(client):
         name = args[1].strip()
         notes = _load()
         if name in notes:
-            await message.edit_text(
+            await safe_edit(message,
                 f"📝 <b>{name}:</b>\n\n{notes[name]}",
                 parse_mode=ParseMode.HTML,
             )
         else:
-            await message.edit_text(f"❌ Заметка <b>{name}</b> не найдена", parse_mode=ParseMode.HTML)
+            await safe_edit(message, f"❌ Заметка <b>{name}</b> не найдена", parse_mode=ParseMode.HTML)
 
 
 def on_load():

@@ -1,5 +1,9 @@
 """Ping - main module"""
 
+import sys, os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from scripts._utils import safe_edit
+
 def register(client):
     from pyrogram import filters
     from pyrogram.types import Message
@@ -8,10 +12,10 @@ def register(client):
     async def ping_handler(client, message: Message):
         import time
         start = time.time()
-        await message.edit_text("**Pong!**")
+        await safe_edit(message, "**Pong!**")
         end = time.time()
         ms = int((end - start) * 1000)
-        await message.edit_text(f"**Pong!** `{ms}ms`")
+        await safe_edit(message, f"**Pong!** `{ms}ms`")
 
 
 def on_load():

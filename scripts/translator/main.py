@@ -3,6 +3,10 @@ Translator - main module
 Generic translation: .tr [lang] <text> or reply
 """
 
+import sys, os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from scripts._utils import safe_edit
+
 def register(client):
     """Register handlers when script is loaded."""
     from pyrogram import filters
@@ -37,10 +41,10 @@ def register(client):
             if message.reply_to_message:
                 text = message.reply_to_message.text
                 if not text:
-                    await message.edit_text("Нет текста для перевода")
+                    await safe_edit(message, "Нет текста для перевода")
                     return
             else:
-                await message.edit_text(
+                await safe_edit(message,
                     "Используйте: <code>.tr [lang] &lt;текст&gt;</code>\n"
                     "Или ответьте на сообщение командой <code>.tr [lang]</code>\n\n"
                     "Примеры:\n"
@@ -50,7 +54,7 @@ def register(client):
                 )
                 return
 
-        await message.edit_text("Перевод...")
+        await safe_edit(message, "Перевод...")
 
         try:
             loop = asyncio.get_running_loop()
@@ -59,14 +63,14 @@ def register(client):
                 lambda: GoogleTranslator(source="auto", target=lang).translate(text)
             )
 
-            await message.edit_text(
+            await safe_edit(message,
                 f"<b>Перевод ({lang}):</b>\n\n"
                 f"<code>{translated_text}</code>",
                 parse_mode=ParseMode.HTML
             )
 
         except Exception as e:
-            await message.edit_text(f"Ошибка перевода: {str(e)}")
+            await safe_edit(message, f"Ошибка перевода: {str(e)}")
 
 
 def on_load():

@@ -2,6 +2,10 @@
 Reply to a message to translate it to Russian.
 """
 
+import sys, os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+from scripts._utils import safe_edit
+
 from deep_translator import GoogleTranslator
 
 
@@ -15,15 +19,15 @@ def register(client):
     async def tra_handler(client, message: Message):
         reply = message.reply_to_message
         if not reply:
-            await message.edit_text("Ответьте на сообщение для перевода.")
+            await safe_edit(message, "Ответьте на сообщение для перевода.")
             return
 
         text = reply.text or reply.caption
         if not text:
-            await message.edit_text("Нет текста для перевода.")
+            await safe_edit(message, "Нет текста для перевода.")
             return
 
-        await message.edit_text("Перевод...")
+        await safe_edit(message, "Перевод...")
 
         try:
             loop = asyncio.get_running_loop()
@@ -32,13 +36,13 @@ def register(client):
                 lambda: GoogleTranslator(source="auto", target="ru").translate(text)
             )
 
-            await message.edit_text(
+            await safe_edit(message,
                 f"<b>Перевод (RU):</b>\n\n<code>{translated}</code>",
                 parse_mode=ParseMode.HTML
             )
 
         except Exception as e:
-            await message.edit_text(f"Ошибка перевода: {e}")
+            await safe_edit(message, f"Ошибка перевода: {e}")
 
 
 def on_load():

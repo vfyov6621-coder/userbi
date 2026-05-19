@@ -3,6 +3,9 @@ Weather - main module
 Weather info with ASCII art. Usage: .wea <city>
 """
 
+import sys, os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from scripts._utils import safe_edit
 import asyncio
 import urllib.request
 import urllib.parse
@@ -142,7 +145,7 @@ def register(client):
     async def wea_handler(client, message: Message):
         args = message.text.split(maxsplit=1)
         if len(args) < 2:
-            await message.edit_text(
+            await safe_edit(message,
                 "<b>🌦 Погода</b>\n\n"
                 "<code>.wea &lt;город&gt;</code>",
                 parse_mode=ParseMode.HTML,
@@ -150,7 +153,7 @@ def register(client):
             return
 
         city = args[1].strip()
-        await message.edit_text(
+        await safe_edit(message,
             f"🔄 Загрузка погоды: <b>{city}</b>...",
             parse_mode=ParseMode.HTML,
         )
@@ -168,7 +171,7 @@ def register(client):
 
             results = geo_data.get("results")
             if not results:
-                await message.edit_text(
+                await safe_edit(message,
                     f"❌ Город <b>{city}</b> не найден",
                     parse_mode=ParseMode.HTML,
                 )
@@ -212,16 +215,16 @@ def register(client):
                 f"💨 Ветер: <b>{wind} км/ч</b>"
             )
 
-            await message.edit_text(text, parse_mode=ParseMode.HTML)
+            await safe_edit(message, text, parse_mode=ParseMode.HTML)
 
         except (asyncio.TimeoutError, TimeoutError):
-            await message.edit_text("❌ Таймаут.", parse_mode=ParseMode.HTML)
+            await safe_edit(message, "❌ Таймаут.", parse_mode=ParseMode.HTML)
         except urllib.error.URLError as e:
-            await message.edit_text(
+            await safe_edit(message,
                 f"❌ Ошибка сети: {e.reason}", parse_mode=ParseMode.HTML,
             )
         except Exception as e:
-            await message.edit_text(
+            await safe_edit(message,
                 f"❌ Ошибка: {e}", parse_mode=ParseMode.HTML,
             )
 

@@ -2,6 +2,10 @@
 Reply to a message or provide text to translate to Simplified Chinese.
 """
 
+import sys, os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+from scripts._utils import safe_edit
+
 from deep_translator import GoogleTranslator
 
 
@@ -23,13 +27,13 @@ def register(client):
             text = args[1]
 
         if not text:
-            await message.edit_text(
+            await safe_edit(message,
                 "<code>.trz</code> (ответ на соо) или <code>.trz текст</code>",
                 parse_mode=ParseMode.HTML
             )
             return
 
-        await message.edit_text("翻译中...")
+        await safe_edit(message, "翻译中...")
 
         try:
             loop = asyncio.get_running_loop()
@@ -38,12 +42,12 @@ def register(client):
                 lambda: GoogleTranslator(source="auto", target="zh-CN").translate(text)
             )
 
-            await message.edit_text(
+            await safe_edit(message,
                 f"<b>翻译 (ZH):</b>\n\n<code>{translated}</code>",
                 parse_mode=ParseMode.HTML
             )
         except Exception as e:
-            await message.edit_text(f"错误: {e}")
+            await safe_edit(message, f"错误: {e}")
 
 
 def on_load():

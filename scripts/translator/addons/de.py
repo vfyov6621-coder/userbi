@@ -2,6 +2,10 @@
 Reply to a message to translate it to German.
 """
 
+import sys, os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+from scripts._utils import safe_edit
+
 from deep_translator import GoogleTranslator
 
 
@@ -23,13 +27,13 @@ def register(client):
             text = args[1]
 
         if not text:
-            await message.edit_text(
+            await safe_edit(message,
                 "<code>.trd</code> (ответ на соо) или <code>.trd текст</code>",
                 parse_mode=ParseMode.HTML
             )
             return
 
-        await message.edit_text("Ubersetzung...")
+        await safe_edit(message, "Ubersetzung...")
 
         try:
             loop = asyncio.get_running_loop()
@@ -38,12 +42,12 @@ def register(client):
                 lambda: GoogleTranslator(source="auto", target="de").translate(text)
             )
 
-            await message.edit_text(
+            await safe_edit(message,
                 f"<b>Ubersetzung (DE):</b>\n\n<code>{translated}</code>",
                 parse_mode=ParseMode.HTML
             )
         except Exception as e:
-            await message.edit_text(f"Fehler: {e}")
+            await safe_edit(message, f"Fehler: {e}")
 
 
 def on_load():
