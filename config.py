@@ -8,6 +8,8 @@ load_dotenv()
 class Config:
     """Userbot configuration. All settings from environment variables."""
 
+    VERSION = "2.4"
+
     # Telegram API
     API_ID = int(os.environ.get("API_ID", 0))
     API_HASH = os.environ.get("API_HASH", "")
@@ -22,7 +24,9 @@ class Config:
     # Paths
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
     SCRIPTS_DIR = os.path.join(BASE_DIR, "scripts")              # built-in scripts (tracked)
+    os.makedirs(SCRIPTS_DIR, exist_ok=True)
     CUSTOM_SCRIPTS_DIR = os.path.join(BASE_DIR, "scripts_custom") # user scripts (gitignored)
+    os.makedirs(CUSTOM_SCRIPTS_DIR, exist_ok=True)
     BACKUPS_DIR = os.path.join(BASE_DIR, "backups")
     AUTO_START_FILE = os.path.join(CUSTOM_SCRIPTS_DIR, "auto_start.json")
     ADDON_STATES_FILE = os.path.join(CUSTOM_SCRIPTS_DIR, "addon_states.json")

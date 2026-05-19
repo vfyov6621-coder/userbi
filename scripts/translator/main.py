@@ -3,14 +3,12 @@ Translator - main module
 Generic translation: .tr [lang] <text> or reply
 """
 
-from deep_translator import GoogleTranslator
-
-
 def register(client):
     """Register handlers when script is loaded."""
     from pyrogram import filters
     from pyrogram.enums import ParseMode
     from pyrogram.types import Message
+    from deep_translator import GoogleTranslator
     import asyncio
 
     @client.on_message(filters.command("tr", prefixes=".") & filters.me)
@@ -55,7 +53,7 @@ def register(client):
         await message.edit_text("Перевод...")
 
         try:
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             translated_text = await loop.run_in_executor(
                 None,
                 lambda: GoogleTranslator(source="auto", target=lang).translate(text)

@@ -156,7 +156,7 @@ def register(client):
         )
 
         try:
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
 
             geo_params = urllib.parse.urlencode({
                 "name": city, "count": 1,

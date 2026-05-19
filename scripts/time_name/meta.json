@@ -1,9 +1,0 @@
-{
-  "name": "TimeName",
-  "version": "1.0",
-  "author": "sandusr",
-  "description": "Время по МСК в нике",
-  "command": ".tn",
-  "addons": [],
-  "tabs": []
-}

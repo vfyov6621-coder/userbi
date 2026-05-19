@@ -360,8 +360,8 @@ async def run_bot():
     """Start the userbot. Client is created here in the same event loop."""
     global bot_client
 
-    Config.add_log(f"Initializing {BOT_NAME}...")
-    logger.info(f"Starting {BOT_NAME}...")
+    Config.add_log(f"Initializing {BOT_NAME} v{Config.VERSION}...")
+    logger.info(f"Starting {BOT_NAME} v{Config.VERSION}...")
 
     if not Config.API_ID or not Config.API_HASH:
         Config.add_log("ERROR: API_ID and API_HASH not configured!", "ERROR")

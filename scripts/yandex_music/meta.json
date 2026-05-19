@@ -1,9 +1,0 @@
-{
-  "name": "Yandex Music",
-  "version": "1.0",
-  "author": "sandusr",
-  "description": "Показывает что ты слушаешь в Яндекс Музыке",
-  "command": ".np",
-  "addons": [],
-  "tabs": []
-}
