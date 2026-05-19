@@ -62,8 +62,25 @@ _chat_enabled = False
 _conversation_history = []
 
 # Лимиты для анализа
-MAX_MESSAGES = 200      # максимум сообщений для анализа
-MAX_CONTEXT_CHARS = 8000  # максимум символов контекста для Ollama
+MAX_MESSAGES = 1000     # максимум сообщений для анализа
+MAX_CONTEXT_CHARS = 12000  # максимум символов контекста для Ollama
+
+# Ключевые слова для авто-определения анализа
+_ANALYZE_KEYWORDS = [
+    "проанализируй", "анализируй", "проанализируй",
+    "анализ", "разберись", "разберись в",
+    "расскажи о", "что за человек", "кто такой", "кто такая",
+    "что он пишет", "что она пишет", "что он пишет",
+    "сделай сводку", "сводка о", "опиши",
+    "последние сообщения", "последние n сообщений",
+    "что обсуждали", "о чём говорили", "о чем говорили",
+]
+
+_CHAT_KEYWORDS = [
+    "сводка по чату", "сводка чата", "проанализируй чат",
+    "анализ чата", "что тут происходит", "о чём чат",
+    "о чем чат", "сделай сводку по",
+]
 
 
 def _load_settings():
@@ -343,6 +360,55 @@ async def _build_analysis_prompt(messages: list, username: str = None, mode: str
             "4. Ключевые моменты обсуждения\n"
             "Будь кратким и по делу."
         )
+
+
+def _extract_number(text: str) -> int:
+    """Извлечь число из текста (для 'последние 500 сообщений')."""
+    import re
+    numbers = re.findall(r'\d+', text)
+    if numbers:
+        return int(numbers[-1])
+    return 0
+
+
+def _extract_username(text: str) -> str:
+    """Извлечь @username из текста."""
+    import re
+    match = re.search(r'@(\w{3,32})', text)
+    if match:
+        return match.group(1)
+    return ""
+
+
+def _detect_analyze_intent(text: str) -> dict:
+    """
+    Определить, хочет ли пользователь анализ.
+    Возвращает: {'type': 'user'|'chat'|None, 'username': str, 'count': int}
+    """
+    text_lower = text.lower().strip()
+
+    # Проверяем чат-сводку
+    for kw in _CHAT_KEYWORDS:
+        if kw in text_lower:
+            count = _extract_number(text)
+            if count:
+                count = min(max(count, 5), MAX_MESSAGES)
+            else:
+                count = 50
+            return {"type": "chat", "username": "", "count": count}
+
+    # Проверяем анализ юзера
+    for kw in _ANALYZE_KEYWORDS:
+        if kw in text_lower:
+            username = _extract_username(text)
+            count = _extract_number(text)
+            if count:
+                count = min(max(count, 5), MAX_MESSAGES)
+            else:
+                count = 50
+            return {"type": "user" if username else "reply", "username": username, "count": count}
+
+    return {"type": None, "username": "", "count": 50}
 
 
 async def _resolve_user(client, target: str, reply_message: Message = None):
@@ -659,20 +725,46 @@ def register(client):
             await _safe_edit(
                 message,
                 "<b>🤖 AI Chat — локальный ассистент</b>\n\n"
-                "<code>.ai &lt;текст&gt;</code> — задать вопрос\n"
+                "<code>.ai &lt;любой вопрос&gt;</code> — спросить AI\n"
                 "<code>.ai on/off</code> — режим диалога\n"
                 "<code>.ai clear</code> — очистить историю\n"
                 "<code>.ai model &lt;name&gt;</code> — сменить модель\n"
                 "<code>.ai status</code> — статус Ollama\n"
-                "<code>.ai sys &lt;текст&gt;</code> — системный промпт\n\n"
-                "<b>Анализ чата:</b>\n"
-                "<code>.ai analyze @username</code> — анализ юзера\n"
-                "<code>.ai analyze @username 100</code> — 100 сообщений\n"
-                "<code>.ai analyze</code> (reply) — анализ автора\n"
-                "<code>.ai summary</code> — сводка по чату",
+                "<code>.ai sys &lt;текст&gt;</code> — характер AI\n\n"
+                "<b>Анализ чата (можно писать по-русски):</b>\n"
+                "<code>.ai проанализируй @username</code>\n"
+                "<code>.ai проанализируй @username 500</code>\n"
+                "<code>.ai расскажи о @username</code>\n"
+                "<code>.ai кто такой @username</code>\n"
+                "<code>.ai опиши @username</code>\n"
+                "<code>.ai проанализируй</code> (reply)\n"
+                "<code>.ai сводка по чату</code>\n"
+                "<code>.ai что обсуждали</code>",
                 parse_mode=ParseMode.HTML,
             )
             return
+
+        # ═══ Авто-определение анализа по русским фразам ═══
+        intent = _detect_analyze_intent(action)
+
+        if intent["type"] == "chat":
+            await _handle_summary(client, message, str(intent["count"]))
+            return
+
+        if intent["type"] == "user":
+            target = f"@{intent['username']}" if intent["username"] else ""
+            count_str = str(intent["count"])
+            await _handle_analyze(client, message, f"{target} {count_str}".strip())
+            return
+
+        if intent["type"] == "reply":
+            # Нет @username но есть ключевое слово — пробуем reply
+            if message.reply_to_message and message.reply_to_message.from_user:
+                u = message.reply_to_message.from_user
+                target = f"@{u.username}" if u.username else str(u.id)
+                count_str = str(intent["count"])
+                await _handle_analyze(client, message, f"{target} {count_str}".strip())
+                return
 
         # .ai <текст> — задать вопрос
         question = args[1].strip()
