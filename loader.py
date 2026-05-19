@@ -1,17 +1,17 @@
 """
 ScriptLoader — модульная загрузка скриптов для sandusr.
+Переписан с нуля. Простой, надёжный, с понятным логированием.
 """
 
 import os
 import sys
 import json
 import ast
-import importlib
+import importlib.util
 import traceback
 import shutil
 import logging
 from datetime import datetime
-from typing import Dict, Any, Optional, List, Tuple
 
 from config import Config
 
@@ -29,96 +29,76 @@ class ScriptLoader:
     #  Scanning
     # ═══════════════════════════════════════════════════════════════════
 
-    def _scan_folders(self, directory):
-        result = []
-        if not os.path.exists(directory):
-            return result
-        for name in sorted(os.listdir(directory)):
-            folder = os.path.join(directory, name)
-            if os.path.isdir(folder) and os.path.exists(os.path.join(folder, "meta.json")):
-                result.append(name)
-        return result
+    def _find_script_dir(self, script_id):
+        """Найти директорию скрипта (custom приоритетнее builtin)."""
+        for d in [self.custom_dir, self.builtin_dir]:
+            p = os.path.join(d, script_id)
+            if os.path.isdir(p) and os.path.exists(os.path.join(p, "meta.json")):
+                return p, d == self.custom_dir
+        return None, None
 
-    def _scan_legacy(self, directory):
-        if not os.path.exists(directory):
-            return []
-        return sorted(
-            f for f in os.listdir(directory)
-            if f.endswith(".py") and not f.startswith("_")
-        )
+    def _find_script_file(self, script_id):
+        """Найти .py файл скрипта (legacy формат)."""
+        fname = script_id if script_id.endswith(".py") else f"{script_id}.py"
+        for d in [self.custom_dir, self.builtin_dir]:
+            p = os.path.join(d, fname)
+            if os.path.isfile(p):
+                return p, d == self.custom_dir
+        return None, None
 
     def get_available_scripts(self):
-        builtin_folders = set(self._scan_folders(self.builtin_dir))
-        custom_folders = set(self._scan_folders(self.custom_dir))
-        all_folders = builtin_folders | custom_folders
-        builtin_files = set(self._scan_legacy(self.builtin_dir))
-        custom_files = set(self._scan_legacy(self.custom_dir))
-        all_files = (builtin_files | custom_files) - {f"{n}/" for n in all_folders}
+        """Список всех доступных script_id (без дубликатов)."""
         ids = set()
-        for name in all_folders:
-            ids.add(name)
-        for fname in all_files:
-            ids.add(fname.replace(".py", ""))
+        # Папки с meta.json
+        for d in [self.builtin_dir, self.custom_dir]:
+            if not os.path.exists(d):
+                continue
+            for name in os.listdir(d):
+                if os.path.isdir(os.path.join(d, name)):
+                    if os.path.exists(os.path.join(d, name, "meta.json")):
+                        ids.add(name)
+        # Legacy .py файлы (только если нет папки с таким же именем)
+        for d in [self.builtin_dir, self.custom_dir]:
+            if not os.path.exists(d):
+                continue
+            for name in os.listdir(d):
+                if name.endswith(".py") and not name.startswith("_"):
+                    sid = name[:-3]  # убираем .py
+                    if sid not in ids:
+                        ids.add(sid)
         return sorted(ids)
 
     def is_folder_script(self, script_id):
-        for d in [self.custom_dir, self.builtin_dir]:
-            if os.path.exists(os.path.join(d, script_id, "meta.json")):
-                return True
-        return False
+        dirpath, _ = self._find_script_dir(script_id)
+        return dirpath is not None
 
     def is_legacy_script(self, script_id):
-        fname = script_id if script_id.endswith(".py") else f"{script_id}.py"
-        for d in [self.custom_dir, self.builtin_dir]:
-            if os.path.exists(os.path.join(d, fname)):
-                return True
-        return False
-
-    # ═══════════════════════════════════════════════════════════════════
-    #  Resolution
-    # ═══════════════════════════════════════════════════════════════════
-
-    def _resolve_dir(self, script_id):
-        custom = os.path.join(self.custom_dir, script_id)
-        if os.path.exists(os.path.join(custom, "meta.json")):
-            return custom, True
-        builtin = os.path.join(self.builtin_dir, script_id)
-        if os.path.exists(os.path.join(builtin, "meta.json")):
-            return builtin, False
-        return None
-
-    def _resolve_file(self, script_id):
-        fname = script_id if script_id.endswith(".py") else f"{script_id}.py"
-        custom = os.path.join(self.custom_dir, fname)
-        if os.path.exists(custom):
-            return custom, True
-        builtin = os.path.join(self.builtin_dir, fname)
-        if os.path.exists(builtin):
-            return builtin, False
-        return None
-
-    def _load_key(self, script_id):
-        if self.is_folder_script(script_id):
-            return script_id
-        return script_id if script_id.endswith(".py") else f"{script_id}.py"
+        filepath, _ = self._find_script_file(script_id)
+        return filepath is not None
 
     # ═══════════════════════════════════════════════════════════════════
     #  Meta & Info
     # ═══════════════════════════════════════════════════════════════════
 
-    def get_script_meta(self, script_id):
-        resolved = self._resolve_dir(script_id)
-        if resolved is None:
-            return None
-        dirpath, is_custom = resolved
+    def _read_meta(self, script_id):
+        """Прочитать meta.json. Возвращает (meta_dict, dirpath) или (None, None)."""
+        dirpath, _ = self._find_script_dir(script_id)
+        if dirpath is None:
+            return None, None
         try:
             with open(os.path.join(dirpath, "meta.json"), "r", encoding="utf-8") as f:
-                meta = json.load(f)
-            meta["_is_custom"] = is_custom
-            meta["_dir"] = dirpath
-            return meta
+                return json.load(f), dirpath
         except Exception:
+            return None, None
+
+    def get_script_meta(self, script_id):
+        meta, dirpath = self._read_meta(script_id)
+        if meta is None:
             return None
+        _, is_custom = self._find_script_dir(script_id)
+        meta["_is_custom"] = is_custom
+        meta["_dir"] = dirpath
+        return meta
 
     def get_addon_states(self, script_id):
         return Config.get_addon_states(script_id)
@@ -127,6 +107,7 @@ class ScriptLoader:
         return Config.set_addon_state(script_id, addon_file, enabled)
 
     def get_script_info(self, script_id):
+        """Полная информация о скрипте."""
         if self.is_folder_script(script_id):
             meta = self.get_script_meta(script_id)
             if not meta:
@@ -153,10 +134,10 @@ class ScriptLoader:
                 ).strftime("%Y-%m-%d %H:%M:%S")
             return info
 
-        resolved = self._resolve_file(script_id)
-        if resolved is None:
+        # Legacy script
+        filepath, is_custom = self._find_script_file(script_id)
+        if filepath is None:
             return None
-        filepath, is_custom = resolved
         try:
             with open(filepath, "r", encoding="utf-8") as f:
                 source = f.read()
@@ -173,7 +154,7 @@ class ScriptLoader:
                 "is_custom": is_custom,
                 "addons": [],
                 "tabs": [],
-                "loaded": f"{script_id}.py" in Config.loaded_modules,
+                "loaded": script_id in Config.loaded_modules,
                 "size": self._fmt_size(os.path.getsize(filepath)),
                 "lines": len(source.splitlines()),
                 "modified": datetime.fromtimestamp(
@@ -195,181 +176,228 @@ class ScriptLoader:
             return None
 
     # ═══════════════════════════════════════════════════════════════════
+    #  Module import helper
+    # ═══════════════════════════════════════════════════════════════════
+
+    @staticmethod
+    def _import_module(module_name, filepath):
+        """Импортировать .py файл как модуль. Возвращает module или raises."""
+        # Очищаем старый модуль из sys.modules
+        if module_name in sys.modules:
+            del sys.modules[module_name]
+
+        spec = importlib.util.spec_from_file_location(module_name, filepath)
+        if spec is None or spec.loader is None:
+            raise RuntimeError(f"spec_from_file_location вернул None для {filepath}")
+
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[module_name] = module
+        spec.loader.exec_module(module)
+        return module
+
+    @staticmethod
+    def _call_register(module, client):
+        """Вызвать module.register(client) если функция существует."""
+        if hasattr(module, "register") and callable(module.register):
+            module.register(client)
+            return True
+        return False
+
+    @staticmethod
+    def _call_lifecycle(module, func_name):
+        """Безопасно вызвать on_load/on_unload."""
+        fn = getattr(module, func_name, None)
+        if fn and callable(fn):
+            try:
+                fn()
+            except Exception as e:
+                print(f"  [!] {func_name}() error: {e}")
+
+    # ═══════════════════════════════════════════════════════════════════
     #  Loading
     # ═══════════════════════════════════════════════════════════════════
 
     def load_script(self, script_id, client=None):
-        load_key = self._load_key(script_id)
-        if load_key in Config.loaded_modules:
-            return {"success": False, "error": f"{script_id} already loaded"}
-        if self.is_folder_script(script_id):
-            return self._load_folder(script_id, client)
-        elif self.is_legacy_script(script_id):
-            return self._load_legacy(script_id, client)
-        return {"success": False, "error": f"{script_id} not found"}
+        """Загрузить скрипт по ID. Возвращает dict с результатом."""
+        if script_id in Config.loaded_modules:
+            return {"success": False, "error": f"{script_id} уже загружен"}
 
-    def _load_folder(self, script_id, client=None):
-        resolved = self._resolve_dir(script_id)
-        if resolved is None:
-            return {"success": False, "error": f"{script_id} not found"}
-        dirpath, is_custom = resolved
-        meta = self.get_script_meta(script_id)
-        if not meta:
-            return {"success": False, "error": "Cannot read meta.json"}
+        if self.is_folder_script(script_id):
+            return self._load_folder_script(script_id, client)
+        elif self.is_legacy_script(script_id):
+            return self._load_legacy_script(script_id, client)
+        else:
+            return {"success": False, "error": f"Скрипт '{script_id}' не найден"}
+
+    def _load_folder_script(self, script_id, client=None):
+        meta, dirpath = self._read_meta(script_id)
+        if meta is None:
+            return {"success": False, "error": f"{script_id}: meta.json не найден или ошибка"}
+
         main_path = os.path.join(dirpath, "main.py")
         if not os.path.exists(main_path):
-            return {"success": False, "error": "main.py not found"}
+            return {"success": False, "error": f"{script_id}: main.py не найден"}
 
         try:
-            module_name = "sandusr_" + script_id
-            if module_name in sys.modules:
-                del sys.modules[module_name]
+            print(f"[loader] Загрузка: {script_id} ...")
 
-            spec = importlib.util.spec_from_file_location(module_name, main_path)
-            if spec is None or spec.loader is None:
-                return {"success": False, "error": "Cannot create spec"}
+            # Импортируем main.py
+            module_name = f"sandusr_{script_id}"
+            module = self._import_module(module_name, main_path)
 
-            module = importlib.util.module_from_spec(spec)
-            sys.modules[module_name] = module
-            spec.loader.exec_module(module)
+            # Регистрируем хендлеры
+            registered = False
+            if client is not None:
+                registered = self._call_register(module, client)
+            if registered:
+                print(f"[loader]   -> register() вызван")
 
-            if hasattr(module, "register") and client is not None:
-                module.register(client)
-                logger.info(f"[{script_id}] register() called")
+            # on_load
+            self._call_lifecycle(module, "on_load")
 
-            if hasattr(module, "on_load"):
-                module.on_load()
-
+            # Сохраняем в Config
             Config.loaded_modules[script_id] = module
             Config.loaded_modules_info[script_id] = self.get_script_info(script_id) or {}
 
-            # Load addons
-            addon_states = Config.get_addon_states(script_id)
-            loaded_addons = []
-            for addon in meta.get("addons", []):
-                addon_file = addon.get("file", "")
-                addon_default = addon.get("enabled", True)
-                is_enabled = addon_states.get(addon_file, addon_default)
-                if not is_enabled:
-                    continue
-                r = self._load_addon(script_id, dirpath, addon_file, client)
-                if r["success"]:
-                    loaded_addons.append(addon_file)
+            # Загружаем аддоны
+            addons_loaded = self._load_addons(script_id, dirpath, meta, client)
 
-            logger.info(f"[{script_id}] loaded (addons: {loaded_addons})")
-            return {"success": True, "info": meta, "addons_loaded": loaded_addons}
+            cmd = meta.get("command", "")
+            print(f"[loader]   OK: {script_id} {cmd} (аддоны: {addons_loaded or 'нет'})")
+            return {"success": True, "info": meta, "addons_loaded": addons_loaded}
 
         except Exception as e:
-            error_msg = f"{type(e).__name__}: {str(e)}"
-            logger.error(f"Error loading {script_id}: {error_msg}")
+            error_msg = f"{type(e).__name__}: {e}"
+            print(f"[loader]   ОШИБКА: {script_id} — {error_msg}")
             traceback.print_exc()
+            # Убираем модуль из sys.modules если загрузка провалилась
+            mod_name = f"sandusr_{script_id}"
+            sys.modules.pop(mod_name, None)
             return {"success": False, "error": error_msg}
 
-    def _load_addon(self, script_id, dirpath, addon_file, client=None):
-        addon_path = os.path.join(dirpath, addon_file)
-        if not os.path.exists(addon_path):
-            return {"success": False, "error": f"{addon_file} not found"}
+    def _load_legacy_script(self, script_id, client=None):
+        filepath, is_custom = self._find_script_file(script_id)
+        if filepath is None:
+            return {"success": False, "error": f"Скрипт '{script_id}' не найден"}
+
+        fname = os.path.basename(filepath)
+        if fname in Config.loaded_modules:
+            return {"success": False, "error": f"{fname} уже загружен"}
+
         try:
-            addon_name = "sandusr_" + script_id + "_" + addon_file.replace("/", "_").replace(".py", "")
-            if addon_name in sys.modules:
-                del sys.modules[addon_name]
+            print(f"[loader] Загрузка (legacy): {script_id} ...")
 
-            spec = importlib.util.spec_from_file_location(addon_name, addon_path)
-            if spec is None or spec.loader is None:
-                return {"success": False, "error": "Cannot create addon spec"}
+            module_name = f"sandusr_legacy_{script_id}"
+            module = self._import_module(module_name, filepath)
 
-            module = importlib.util.module_from_spec(spec)
-            sys.modules[addon_name] = module
-            spec.loader.exec_module(module)
+            if client is not None:
+                self._call_register(module, client)
 
-            if hasattr(module, "register") and client is not None:
-                module.register(client)
-            if hasattr(module, "on_load"):
-                module.on_load()
+            self._call_lifecycle(module, "on_load")
 
-            Config.loaded_addons.setdefault(script_id, {})[addon_file] = module
-            logger.info(f"[{script_id}/{addon_file}] addon loaded")
+            Config.loaded_modules[fname] = module
+            Config.loaded_modules_info[fname] = self.get_script_info(script_id) or {}
+
+            print(f"[loader]   OK: {fname}")
             return {"success": True}
+
         except Exception as e:
-            error_msg = f"{type(e).__name__}: {str(e)}"
-            logger.error(f"Error loading addon {script_id}/{addon_file}: {error_msg}")
-            return {"success": False, "error": error_msg}
-
-    def _load_legacy(self, script_id, client=None):
-        resolved = self._resolve_file(script_id)
-        if resolved is None:
-            return {"success": False, "error": f"{script_id} not found"}
-        filepath, is_custom = resolved
-        filename = os.path.basename(filepath)
-        if filename in Config.loaded_modules:
-            return {"success": False, "error": f"{filename} already loaded"}
-        try:
-            module_name = "sandusr_legacy_" + filename.replace(".py", "")
-            if module_name in sys.modules:
-                del sys.modules[module_name]
-
-            spec = importlib.util.spec_from_file_location(module_name, filepath)
-            if spec is None or spec.loader is None:
-                return {"success": False, "error": "Cannot create spec"}
-
-            module = importlib.util.module_from_spec(spec)
-            sys.modules[module_name] = module
-            spec.loader.exec_module(module)
-
-            if hasattr(module, "register") and client is not None:
-                module.register(client)
-            if hasattr(module, "on_load"):
-                module.on_load()
-
-            Config.loaded_modules[filename] = module
-            Config.loaded_modules_info[filename] = self.get_script_info(script_id) or {}
-            logger.info(f"[{filename}] legacy loaded")
-            return {"success": True}
-        except Exception as e:
-            error_msg = f"{type(e).__name__}: {str(e)}"
-            logger.error(f"Error loading {filename}: {error_msg}")
+            error_msg = f"{type(e).__name__}: {e}"
+            print(f"[loader]   ОШИБКА: {script_id} — {error_msg}")
             traceback.print_exc()
+            mod_name = f"sandusr_legacy_{script_id}"
+            sys.modules.pop(mod_name, None)
             return {"success": False, "error": error_msg}
+
+    def _load_addons(self, script_id, dirpath, meta, client=None):
+        """Загрузить включённые аддоны скрипта. Возвращает список загруженных файлов."""
+        addons = meta.get("addons", [])
+        if not addons:
+            return []
+
+        addon_states = Config.get_addon_states(script_id)
+        loaded = []
+
+        for addon in addons:
+            addon_file = addon.get("file", "")
+            if not addon_file:
+                continue
+
+            # Проверяем включён ли аддон
+            is_enabled = addon_states.get(addon_file, addon.get("enabled", True))
+            if not is_enabled:
+                continue
+
+            addon_path = os.path.join(dirpath, addon_file)
+            if not os.path.exists(addon_path):
+                print(f"[loader]   Аддон не найден: {addon_file}")
+                continue
+
+            try:
+                addon_name = f"sandusr_{script_id}_addon_{addon_file.replace('/', '_').replace('.py', '')}"
+                module = self._import_module(addon_name, addon_path)
+
+                if client is not None:
+                    self._call_register(module, client)
+
+                self._call_lifecycle(module, "on_load")
+
+                Config.loaded_addons.setdefault(script_id, {})[addon_file] = module
+                loaded.append(addon_file)
+                print(f"[loader]     Аддон OK: {addon_file}")
+
+            except Exception as e:
+                print(f"[loader]     Аддон ОШИБКА: {addon_file} — {e}")
+
+        return loaded
 
     # ═══════════════════════════════════════════════════════════════════
     #  Unloading
     # ═══════════════════════════════════════════════════════════════════
 
     def unload_script(self, script_id):
-        load_key = self._load_key(script_id)
-        actual_key = load_key if load_key in Config.loaded_modules else script_id
-        if actual_key not in Config.loaded_modules:
-            if script_id not in Config.loaded_modules:
-                return {"success": False, "error": f"{script_id} not loaded"}
-            actual_key = script_id
+        """Выгрузить скрипт. Ищет по script_id и по имени файла."""
+        # Ищем ключ в loaded_modules
+        key = None
+        if script_id in Config.loaded_modules:
+            key = script_id
+        else:
+            fname = script_id if script_id.endswith(".py") else f"{script_id}.py"
+            if fname in Config.loaded_modules:
+                key = fname
 
-        module = Config.loaded_modules[actual_key]
+        if key is None:
+            return {"success": False, "error": f"{script_id} не загружен"}
+
+        module = Config.loaded_modules[key]
         try:
-            # Unload addons first
-            addons = Config.loaded_addons.get(actual_key, {})
+            # 1. Выгружаем аддоны
+            addons = Config.loaded_addons.pop(key, {})
             for addon_file, addon_module in addons.items():
-                if hasattr(addon_module, "on_unload"):
-                    addon_module.on_unload()
-                addon_name = "sandusr_" + actual_key + "_" + addon_file.replace("/", "_").replace(".py", "")
+                self._call_lifecycle(addon_module, "on_unload")
+                addon_name = f"sandusr_{key}_addon_{addon_file.replace('/', '_').replace('.py', '')}"
                 sys.modules.pop(addon_name, None)
-            Config.loaded_addons.pop(actual_key, None)
 
-            # Unload main module
-            if hasattr(module, "on_unload"):
-                module.on_unload()
-            if not actual_key.endswith(".py"):
-                mod_name = "sandusr_" + actual_key
+            # 2. on_unload главного модуля
+            self._call_lifecycle(module, "on_unload")
+
+            # 3. Убираем из sys.modules
+            if key.endswith(".py"):
+                mod_name = f"sandusr_legacy_{key.replace('.py', '')}"
             else:
-                mod_name = "sandusr_legacy_" + actual_key.replace(".py", "")
+                mod_name = f"sandusr_{key}"
             sys.modules.pop(mod_name, None)
 
-            del Config.loaded_modules[actual_key]
-            Config.loaded_modules_info.pop(actual_key, None)
-            logger.info(f"[{actual_key}] unloaded")
+            # 4. Убираем из Config
+            del Config.loaded_modules[key]
+            Config.loaded_modules_info.pop(key, None)
+
+            print(f"[loader] Выгружен: {key}")
             return {"success": True}
+
         except Exception as e:
-            error_msg = f"{type(e).__name__}: {str(e)}"
-            logger.error(f"Error unloading {script_id}: {error_msg}")
+            error_msg = f"{type(e).__name__}: {e}"
+            print(f"[loader] Ошибка выгрузки {key}: {error_msg}")
             return {"success": False, "error": error_msg}
 
     # ═══════════════════════════════════════════════════════════════════
@@ -377,32 +405,42 @@ class ScriptLoader:
     # ═══════════════════════════════════════════════════════════════════
 
     def auto_load_all(self, client=None):
+        """Загрузить все скрипты при старте."""
         scripts = Config.get_auto_start()
 
-        # Если auto_start.json нет (None) — грузим ВСЕ доступные скрипты
         if scripts is None:
+            # Нет auto_start.json — грузим ВСЕ доступные
             scripts = self.get_available_scripts()
-            logger.info(f"No auto_start.json found, loading all {len(scripts)} scripts")
+            print(f"[loader] auto_start.json не найден, загружаем все {len(scripts)} скриптов")
+        else:
+            print(f"[loader] auto_start.json: {len(scripts)} скриптов")
 
-        loaded, failed = [], []
-        for item in scripts:
-            result = self.load_script(item, client)
+        loaded = []
+        failed = []
+
+        for script_id in scripts:
+            result = self.load_script(script_id, client)
             if result["success"]:
-                loaded.append(item)
+                loaded.append(script_id)
             else:
-                failed.append({"file": item, "error": result.get("error", "?")})
+                failed.append({"file": script_id, "error": result.get("error", "?")})
+
+        print(f"[loader] Итого: {len(loaded)}/{len(scripts)} загружено")
+        if failed:
+            print(f"[loader] Не загружены:")
+            for f in failed:
+                print(f"  - {f['file']}: {f['error']}")
+
         return {"success": True, "loaded": loaded, "failed": failed, "total": len(scripts)}
 
     # ═══════════════════════════════════════════════════════════════════
-    #  Tabs (for web panel)
+    #  Tabs (для веб-панели)
     # ═══════════════════════════════════════════════════════════════════
 
     def get_available_tabs(self):
         tabs = []
         for script_id in list(Config.loaded_modules.keys()):
-            if not self.is_folder_script(script_id):
-                continue
-            meta = self.get_script_meta(script_id)
+            meta, _ = self._read_meta(script_id)
             if meta and meta.get("tabs"):
                 for tab in meta["tabs"]:
                     tabs.append({
@@ -430,22 +468,19 @@ class ScriptLoader:
 
     def get_script_source(self, script_id, subpath="main.py"):
         if self.is_folder_script(script_id):
-            resolved = self._resolve_dir(script_id)
-            if resolved is None:
+            dirpath, _ = self._find_script_dir(script_id)
+            if dirpath is None:
                 return None
-            filepath = os.path.join(resolved[0], subpath)
+            filepath = os.path.join(dirpath, subpath)
         else:
-            resolved = self._resolve_file(script_id)
-            if resolved is None:
+            filepath, _ = self._find_script_file(script_id)
+            if filepath is None:
                 return None
-            filepath = resolved[0]
-        if os.path.exists(filepath):
-            try:
-                with open(filepath, "r", encoding="utf-8") as f:
-                    return f.read()
-            except Exception:
-                pass
-        return None
+        try:
+            with open(filepath, "r", encoding="utf-8") as f:
+                return f.read()
+        except Exception:
+            return None
 
     def save_script(self, script_id, source, subpath="main.py"):
         if self.is_folder_script(script_id):
@@ -464,7 +499,6 @@ class ScriptLoader:
                 compile(source, subpath, "exec")
             with open(filepath, "w", encoding="utf-8") as f:
                 f.write(source)
-            logger.info(f"Saved {filepath}")
             return {"success": True}
         except SyntaxError as e:
             return {"success": False, "error": f"Syntax error (line {e.lineno}): {e.msg}"}
@@ -479,7 +513,7 @@ class ScriptLoader:
                     self.unload_script(script_id)
                 shutil.rmtree(custom_dir)
                 return {"success": True}
-            return {"success": False, "error": f"Cannot delete built-in {script_id}"}
+            return {"success": False, "error": f"Нельзя удалить встроенный {script_id}"}
         else:
             fname = script_id if script_id.endswith(".py") else f"{script_id}.py"
             custom_path = os.path.join(self.custom_dir, fname)
@@ -488,7 +522,7 @@ class ScriptLoader:
                     self.unload_script(script_id)
                 os.remove(custom_path)
                 return {"success": True}
-            return {"success": False, "error": f"{script_id} not found or built-in"}
+            return {"success": False, "error": f"{script_id} не найден или встроенный"}
 
     # ═══════════════════════════════════════════════════════════════════
     #  Backups
@@ -500,17 +534,19 @@ class ScriptLoader:
         backup_dir = os.path.join(Config.BACKUPS_DIR, f"backup_{timestamp}")
         os.makedirs(backup_dir, exist_ok=True)
         saved = 0
-        for base in [self.custom_dir, self.builtin_dir]:
-            if os.path.exists(base):
-                for item in os.listdir(base):
-                    src = os.path.join(base, item)
-                    prefix = "custom_" if base == self.custom_dir else "builtin_"
-                    dst = os.path.join(backup_dir, prefix + item)
-                    if os.path.isdir(src):
-                        shutil.copytree(src, dst)
-                    elif os.path.isfile(src):
-                        shutil.copy2(src, dst)
-                    saved += 1
+        for base, prefix in [(self.custom_dir, "custom_"), (self.builtin_dir, "builtin_")]:
+            if not os.path.exists(base):
+                continue
+            for item in os.listdir(base):
+                if item.startswith("."):
+                    continue
+                src = os.path.join(base, item)
+                dst = os.path.join(backup_dir, prefix + item)
+                if os.path.isdir(src):
+                    shutil.copytree(src, dst)
+                elif os.path.isfile(src):
+                    shutil.copy2(src, dst)
+                saved += 1
         Config.add_log(f"Backup created: backup_{timestamp}")
         return {"success": True, "backup_name": f"backup_{timestamp}", "files": saved}
 
